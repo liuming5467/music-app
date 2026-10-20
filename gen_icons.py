@@ -25,46 +25,48 @@ def gradient_bg(size):
                     px[x + dx, y] = (r, g, b)
     return img
 
-def draw_symmetric_note(img, size, note_h_ratio=0.56):
-    """手绘对称双音符（基准 512 设计，按尺寸等比缩放）
+def draw_standard_note(img, size):
+    """手绘标准乐理形态双音符 ♫（基准 512 设计，按尺寸等比缩放）
 
-    结构（以中心 c 对称）：
-    - 两根符干：中心分别在 c-d 与 c+d（严格对称），从顶部贯穿到头部
-    - 两个音符头：椭圆挂在符干正下方（头中心 = 干中心，对称）
+    标准形态（乐谱里的样子）：
+    - 音符头：椭圆，位于符干的左下方
+    - 符干：从音符头右侧竖直向上
     - 横梁：水平连接两干顶部
-    整体 ink bbox 关于 c 中心完全对称。
+    布局约束：两根符干中心严格对称于图标垂直中心线。
     """
     k = size / 512.0
     c = size / 2
     white = (255, 255, 255, 255)
-    d = 100 * k          # 符干距中心线半距（两干中心距 200*k）
-    stem_w = 24 * k      # 符干宽
-    head_w = 116 * k     # 音符头宽
-    head_h = 78 * k      # 音符头高
+    d = 98 * k           # 符干距中心线半距（两干中心距 196*k，严格对称）
+    stem_w = 26 * k      # 符干宽
     y_top = 130 * k      # 梁/干顶部
-    head_cy = 377 * k    # 音符头中心 y
-    beam_h = 54 * k      # 横梁高
-    stem_bottom = 392 * k  # 符干底部（插入头内）
+    stem_bottom = 382 * k  # 符干底部（到头中心线）
+    head_w = 112 * k     # 音符头宽
+    head_h = 76 * k      # 音符头高
+    head_cy = 375 * k    # 音符头中心 y
+    head_dx = 40 * k     # 头中心相对符干中心的左偏（头在干左下）
+    beam_h = 56 * k      # 横梁高
+    beam_pad = 2 * k     # 横梁在干外的延伸
 
     draw = ImageDraw.Draw(img)
     for side in (-1, 1):
-        x_center = c + side * d
-        # 音符头（椭圆，中心 = 干中心）
-        draw.ellipse([x_center - head_w/2, head_cy - head_h/2,
-                      x_center + head_w/2, head_cy + head_h/2], fill=white)
-        # 符干（矩形，中心对称于 x_center）
-        draw.rectangle([x_center - stem_w/2, y_top,
-                        x_center + stem_w/2, stem_bottom], fill=white)
-    # 横梁：连接两干顶部（水平，覆盖两干并外延到干外缘）
-    beam_left = c - d - stem_w/2 - 6 * k
-    beam_right = c + d + stem_w/2 + 6 * k
-    draw.rectangle([beam_left, y_top, beam_right, y_top + beam_h], fill=white)
+        stem_cx = c + side * d          # 符干中心（对称于 c）
+        head_cx = stem_cx - head_dx      # 音符头中心（干的左下方）
+        # 音符头（椭圆）
+        draw.ellipse([head_cx - head_w/2, head_cy - head_h/2,
+                      head_cx + head_w/2, head_cy + head_h/2], fill=white)
+        # 符干（从头顶部向上）
+        draw.rectangle([stem_cx - stem_w/2, y_top,
+                        stem_cx + stem_w/2, stem_bottom], fill=white)
+    # 横梁：水平连接两干顶部
+    draw.rectangle([c - d - stem_w/2 - beam_pad, y_top,
+                    c + d + stem_w/2 + beam_pad, y_top + beam_h], fill=white)
     return img
 
-def make_icon(size, note_h_ratio=0.56):
-    """渐变背景 + 对称双音符 + 圆角"""
+def make_icon(size):
+    """渐变背景 + 标准双音符 + 圆角"""
     img = gradient_bg(size).convert('RGBA')
-    draw_symmetric_note(img, size, note_h_ratio)
+    draw_standard_note(img, size)
     # 圆角蒙版
     mask = Image.new('L', (size, size), 0)
     mdraw = ImageDraw.Draw(mask)
@@ -79,7 +81,7 @@ def make_maskable(size):
     bg = gradient_bg(size).convert('RGBA')
     # 先在大画布绘制再等比缩小贴回，保证小尺寸下比例一致
     big = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw_symmetric_note(big, size, 0.56)
+    draw_standard_note(big, size)
     # 缩放到 40% 高度（0.40/0.56 ≈ 0.714 倍）
     factor = 0.40 / 0.56
     new_w = int(size * factor)

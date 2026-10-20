@@ -25,10 +25,10 @@ def gradient_bg(size):
                     px[x + dx, y] = (r, g, b)
     return img
 
-def render_tilted_note(size, tilt=12, note_h_ratio=0.60):
-    """Apple Music 风格倾斜双音符：粗壮圆润部件 + 整体上扬倾斜，裁剪后精确居中
+def render_tilted_note(size, tilt=0, note_h_ratio=0.60):
+    """Apple Music 风格双音符：粗壮圆润部件，水平放置（两干等高），裁剪后精确居中
 
-    流程：透明图层画水平双音符 -> rotate(tilt) 左低右高上扬姿态
+    流程：透明图层画水平双音符 -> rotate(tilt)（默认 0 不倾斜）
     -> 裁剪 ink bbox -> 等比缩放到目标高度 -> 返回居中坐标
     """
     k = size / 512.0
@@ -59,7 +59,7 @@ def render_tilted_note(size, tilt=12, note_h_ratio=0.60):
     d.rectangle([c - dist - stem_w/2, y_top,
                  c + dist + stem_w/2, y_top + beam_h], fill=white)
 
-    # 整体倾斜（PIL 正角度=逆时针：梁右端上扬、左端下垂，形成上扬姿态）
+    # 整体姿态（tilt=0 时为水平，两干等高）
     rotated = layer.rotate(tilt, resample=Image.BICUBIC, expand=False)
     # 裁剪实际字形并缩放到目标高度
     bbox = rotated.getbbox()
@@ -73,8 +73,8 @@ def render_tilted_note(size, tilt=12, note_h_ratio=0.60):
     return note, (x, y)
 
 def draw_apple_style_note(img, size, note_h_ratio=0.60):
-    """在渐变背景上合成 Apple 风格倾斜音符（居中）"""
-    note, (x, y) = render_tilted_note(size, tilt=12, note_h_ratio=note_h_ratio)
+    """在渐变背景上合成 Apple 风格水平音符（居中，两干等高）"""
+    note, (x, y) = render_tilted_note(size, tilt=0, note_h_ratio=note_h_ratio)
     img.alpha_composite(note, (x, y))
     return img
 

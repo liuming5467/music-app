@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#12101f">
+  <meta name="description" content="多音源聚合音乐播放器：网易云 / QQ / 酷我 / JOOX 一站搜索播放">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="音乐站">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="manifest" href="manifest.json">
+  <title>我的音乐站</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- ======== 顶部：标题 + 搜索 ======== -->
+    <header class="app-header">
+      <div class="header-title">
+        <span class="logo-note">♪</span>
+        <h1>我的音乐站</h1>
+      </div>
+      <div class="search-bar">
+        <input id="searchInput" type="search" placeholder="输入歌名 / 歌手，回车搜索…" enterkeyhint="search" autocomplete="off">
+        <button id="searchBtn" class="search-btn" aria-label="搜索">
+          <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        </button>
+      </div>
+      <!-- 音源选择 chips -->
+      <div class="source-chips" id="sourceChips">
+        <label class="chip" data-source="netease">
+          <input type="checkbox" checked><span>网易云</span>
+        </label>
+        <label class="chip" data-source="qq">
+          <input type="checkbox" checked><span>QQ</span>
+        </label>
+        <label class="chip" data-source="kuwo">
+          <input type="checkbox" checked><span>酷我</span>
+        </label>
+        <label class="chip" data-source="joox">
+          <input type="checkbox"><span>JOOX</span>
+        </label>
+        <select id="limitSelect" class="limit-select" aria-label="每源数量">
+          <option value="10" selected>每源10首</option>
+          <option value="20">每源20首</option>
+          <option value="30">每源30首</option>
+        </select>
+      </div>
+      <div class="search-status" id="searchStatus">尚未搜索，试试输入「林俊杰」？</div>
+    </header>
+
+    <!-- ======== 主内容区 ======== -->
+    <main class="app-main">
+
+      <!-- Tab: 搜索结果 -->
+      <section class="tab-panel" id="panelResults">
+        <div class="panel-head">
+          <h2>搜索结果</h2>
+          <span class="result-count" id="resultCount"></span>
+        </div>
+        <ul class="track-list" id="resultList">
+          <li class="empty-hint">
+            <div class="empty-art">🎧</div>
+            <p>搜索并播放一首歌吧！</p>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Tab: 歌单 -->
+      <section class="tab-panel hidden" id="panelPlaylists">
+        <div class="panel-head">
+          <h2>我的音乐</h2>
+          <div class="pl-actions">
+            <button id="btnNewPlaylist" class="text-btn">＋ 新建歌单</button>
+            <button id="btnImport" class="text-btn">导入</button>
+            <button id="btnExport" class="text-btn">导出</button>
+          </div>
+        </div>
+
+        <div class="playlist-group" id="favGroup">
+          <div class="group-head">
+            <h3>❤ 我的收藏</h3>
+            <span class="group-count" id="favCount">0</span>
+          </div>
+          <ul class="track-list" id="favList"></ul>
+        </div>
+
+        <div id="userPlaylists"></div>
+      </section>
+    </main>
+
+    <!-- ======== 底部：mini 播放器 + tab bar ======== -->
+    <div class="bottom-stack">
+      <div class="mini-player" id="miniPlayer" role="button" aria-label="展开播放页">
+        <div class="mini-art" id="miniArt">♪</div>
+        <div class="mini-info">
+          <div class="mini-title" id="miniTitle">未在播放</div>
+          <div class="mini-artist" id="miniArtist">点一首歌开始吧</div>
+          <div class="mini-progress"><div class="mini-progress-bar" id="miniProgressBar"></div></div>
+        </div>
+        <div class="mini-controls">
+          <button class="ctl-btn" id="miniPrev" aria-label="上一曲">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+          </button>
+          <button class="ctl-btn play" id="miniPlay" aria-label="播放/暂停">
+            <svg viewBox="0 0 24 24" width="28" height="28" id="miniPlayIcon"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="ctl-btn" id="miniNext" aria-label="下一曲">
+            <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <nav class="tab-bar">
+        <button class="tab-btn active" data-tab="results">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 0 0 1.48-5.34c-.47-2.78-2.79-5-5.59-5.34a6.505 6.505 0 0 0-7.27 7.27c.34 2.8 2.56 5.12 5.34 5.59a6.5 6.5 0 0 0 5.34-1.48l.27.28v.79l4.25 4.25c.41.41 1.08.41 1.49 0 .41-.41.41-1.08 0-1.49L15.5 14zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <span>搜索</span>
+        </button>
+        <button class="tab-btn" data-tab="playlists">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 6h12v2H3V6zm0 5h12v2H3v-2zm0 5h8v2H3v-2zm14 1.5v-9l6 4.5-6 4.5z"/></svg>
+          <span>歌单</span>
+        </button>
+      </nav>
+    </div>
+
+    <!-- ======== 全屏播放页 ======== -->
+    <div class="player-fullscreen hidden" id="playerFullscreen">
+      <div class="pf-bg" id="pfBg"></div>
+      <div class="pf-header">
+        <button class="pf-close" id="pfClose" aria-label="收起">
+          <svg viewBox="0 0 24 24" width="26" height="26"><path fill="currentColor" d="M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z"/></svg>
+        </button>
+        <div class="pf-head-title">
+          <div class="pf-now">正在播放</div>
+          <div class="pf-list-name" id="pfListName">搜索结果</div>
+        </div>
+        <div class="pf-fav" id="pfFav" role="button" aria-label="收藏">♡</div>
+      </div>
+
+      <div class="pf-body">
+        <div class="pf-art-wrap">
+          <img class="pf-art" id="pfArt" src="" alt="封面" style="display:none">
+          <div class="pf-art-fallback" id="pfArtFallback">♪</div>
+        </div>
+        <div class="pf-meta">
+          <div class="pf-title" id="pfTitle">暂未选择歌曲</div>
+          <div class="pf-artist" id="pfArtist">—</div>
+          <div class="pf-badges">
+            <span class="badge source-badge" id="pfSource">-</span>
+            <span class="badge quality-badge" id="pfQuality">-</span>
+          </div>
+        </div>
+
+        <div class="pf-seek">
+          <span class="pf-time" id="pfTimeCur">00:00</span>
+          <input type="range" id="pfSeek" min="0" max="100" value="0" step="0.1" aria-label="进度">
+          <span class="pf-time" id="pfTimeDur">00:00</span>
+        </div>
+
+        <div class="pf-controls">
+          <button class="pf-mode" id="pfMode" aria-label="播放模式">🔁</button>
+          <button class="pf-ctl" id="pfPrev" aria-label="上一曲">
+            <svg viewBox="0 0 24 24" width="34" height="34"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+          </button>
+          <button class="pf-ctl pf-play" id="pfPlay" aria-label="播放/暂停">
+            <svg viewBox="0 0 24 24" width="44" height="44" id="pfPlayIcon"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+          </button>
+          <button class="pf-ctl" id="pfNext" aria-label="下一曲">
+            <svg viewBox="0 0 24 24" width="34" height="34"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+          </button>
+          <div class="pf-volume-wrap">
+            <span class="pf-vol-icon">🔊</span>
+            <input type="range" id="pfVolume" min="0" max="100" value="80" aria-label="音量">
+          </div>
+        </div>
+
+        <div class="pf-lyrics" id="pfLyrics">
+          <div class="lyrics-placeholder">暂无歌词，试着播放一首支持歌词的歌曲</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== 弹窗层 ======== -->
+    <div class="modal-mask hidden" id="modalMask">
+      <div class="modal" id="modalBox">
+        <div class="modal-head">
+          <span id="modalTitle">标题</span>
+          <button class="modal-close" id="modalClose" aria-label="关闭">×</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
+      </div>
+    </div>
+
+    <!-- toast -->
+    <div class="toast hidden" id="toast"></div>
+  </div>
+
+  <audio id="audio" preload="auto"></audio>
+  <script src="js/app.js"></script>
+</body>
+</html>

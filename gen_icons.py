@@ -25,48 +25,63 @@ def gradient_bg(size):
                     px[x + dx, y] = (r, g, b)
     return img
 
-def draw_standard_note(img, size):
-    """手绘标准乐理形态双音符 ♫（基准 512 设计，按尺寸等比缩放）
+def render_tilted_note(size, tilt=12, note_h_ratio=0.60):
+    """Apple Music 风格倾斜双音符：粗壮圆润部件 + 整体上扬倾斜，裁剪后精确居中
 
-    标准形态（乐谱里的样子）：
-    - 音符头：椭圆，位于符干的左下方
-    - 符干：从音符头右侧竖直向上
-    - 横梁：水平连接两干顶部
-    布局约束：两根符干中心严格对称于图标垂直中心线。
+    流程：透明图层画水平双音符 -> rotate(tilt) 左低右高上扬姿态
+    -> 裁剪 ink bbox -> 等比缩放到目标高度 -> 返回居中坐标
     """
     k = size / 512.0
-    c = size / 2
     white = (255, 255, 255, 255)
-    d = 98 * k           # 符干距中心线半距（两干中心距 196*k，严格对称）
-    stem_w = 26 * k      # 符干宽
-    y_top = 130 * k      # 梁/干顶部
-    stem_bottom = 382 * k  # 符干底部（到头中心线）
-    head_w = 112 * k     # 音符头宽
-    head_h = 76 * k      # 音符头高
-    head_cy = 375 * k    # 音符头中心 y
-    head_dx = 40 * k     # 头中心相对符干中心的左偏（头在干左下）
-    beam_h = 56 * k      # 横梁高
-    beam_pad = 2 * k     # 横梁在干外的延伸
+    layer = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    c = size / 2
+    dist = 85 * k        # 符干距中心线半距（Apple 音符两干间距紧凑）
+    stem_w = 30 * k      # 符干宽（Apple 风格粗壮）
+    y_top = 122 * k
+    stem_bottom = 385 * k
+    head_w = 112 * k     # 音符头宽（饱满圆润）
+    head_h = 92 * k      # 音符头高（接近圆）
+    head_cy = 372 * k
+    head_dx = 34 * k     # 头中心相对符干中心的左偏
+    beam_h = 58 * k      # 横梁厚
 
-    draw = ImageDraw.Draw(img)
     for side in (-1, 1):
-        stem_cx = c + side * d          # 符干中心（对称于 c）
-        head_cx = stem_cx - head_dx      # 音符头中心（干的左下方）
-        # 音符头（椭圆）
-        draw.ellipse([head_cx - head_w/2, head_cy - head_h/2,
-                      head_cx + head_w/2, head_cy + head_h/2], fill=white)
-        # 符干（从头顶部向上）
-        draw.rectangle([stem_cx - stem_w/2, y_top,
-                        stem_cx + stem_w/2, stem_bottom], fill=white)
-    # 横梁：水平连接两干顶部
-    draw.rectangle([c - d - stem_w/2 - beam_pad, y_top,
-                    c + d + stem_w/2 + beam_pad, y_top + beam_h], fill=white)
+        stem_cx = c + side * dist
+        head_cx = stem_cx - head_dx
+        # 音符头
+        d.ellipse([head_cx - head_w/2, head_cy - head_h/2,
+                   head_cx + head_w/2, head_cy + head_h/2], fill=white)
+        # 符干
+        d.rectangle([stem_cx - stem_w/2, y_top,
+                     stem_cx + stem_w/2, stem_bottom], fill=white)
+    # 横梁
+    d.rectangle([c - dist - stem_w/2, y_top,
+                 c + dist + stem_w/2, y_top + beam_h], fill=white)
+
+    # 整体倾斜（PIL 正角度=逆时针：梁右端上扬、左端下垂，形成上扬姿态）
+    rotated = layer.rotate(tilt, resample=Image.BICUBIC, expand=False)
+    # 裁剪实际字形并缩放到目标高度
+    bbox = rotated.getbbox()
+    note = rotated.crop(bbox)
+    target_h = int(size * note_h_ratio)
+    target_w = max(1, int(note.width * target_h / note.height))
+    note = note.resize((target_w, target_h), Image.LANCZOS)
+    # 以字形中心精确居中
+    x = (size - target_w) // 2
+    y = (size - target_h) // 2
+    return note, (x, y)
+
+def draw_apple_style_note(img, size, note_h_ratio=0.60):
+    """在渐变背景上合成 Apple 风格倾斜音符（居中）"""
+    note, (x, y) = render_tilted_note(size, tilt=12, note_h_ratio=note_h_ratio)
+    img.alpha_composite(note, (x, y))
     return img
 
 def make_icon(size):
-    """渐变背景 + 标准双音符 + 圆角"""
+    """渐变背景 + Apple 风格倾斜双音符 + 圆角"""
     img = gradient_bg(size).convert('RGBA')
-    draw_standard_note(img, size)
+    draw_apple_style_note(img, size, 0.60)
     # 圆角蒙版
     mask = Image.new('L', (size, size), 0)
     mdraw = ImageDraw.Draw(mask)
@@ -77,17 +92,9 @@ def make_icon(size):
     return final
 
 def make_maskable(size):
-    """maskable 图标：全幅渐变背景 + 音符缩到 40% 居中（留足 safe area）"""
+    """maskable 图标：全幅渐变背景 + 音符缩到 42% 居中（留足 safe area）"""
     bg = gradient_bg(size).convert('RGBA')
-    # 先在大画布绘制再等比缩小贴回，保证小尺寸下比例一致
-    big = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw_standard_note(big, size)
-    # 缩放到 40% 高度（0.40/0.56 ≈ 0.714 倍）
-    factor = 0.40 / 0.56
-    new_w = int(size * factor)
-    small = big.resize((new_w, new_w), Image.LANCZOS)
-    # 只贴音符区域（big 大部分透明，resize 后整体贴上即可）
-    bg.alpha_composite(small, ((size - new_w)//2, (size - new_w)//2))
+    draw_apple_style_note(bg, size, 0.42)
     return bg
 
 sizes = {

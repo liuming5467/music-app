@@ -72,7 +72,7 @@ def render_tilted_note(size, tilt=0, note_h_ratio=0.60):
     y = (size - target_h) // 2
     return note, (x, y)
 
-def draw_apple_style_note(img, size, note_h_ratio=0.60):
+def draw_apple_style_note(img, size, note_h_ratio=0.68):
     """在渐变背景上合成 Apple 风格水平音符（居中，两干等高）"""
     note, (x, y) = render_tilted_note(size, tilt=0, note_h_ratio=note_h_ratio)
     img.alpha_composite(note, (x, y))
@@ -81,7 +81,7 @@ def draw_apple_style_note(img, size, note_h_ratio=0.60):
 def make_icon(size):
     """渐变背景 + Apple 风格倾斜双音符 + 圆角"""
     img = gradient_bg(size).convert('RGBA')
-    draw_apple_style_note(img, size, 0.60)
+    draw_apple_style_note(img, size, 0.68)
     # 圆角蒙版
     mask = Image.new('L', (size, size), 0)
     mdraw = ImageDraw.Draw(mask)
@@ -94,7 +94,7 @@ def make_icon(size):
 def make_maskable(size):
     """maskable 图标：全幅渐变背景 + 音符缩到 42% 居中（留足 safe area）"""
     bg = gradient_bg(size).convert('RGBA')
-    draw_apple_style_note(bg, size, 0.42)
+    draw_apple_style_note(bg, size, 0.48)
     return bg
 
 sizes = {

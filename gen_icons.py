@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""生成 PWA/APP 图标：紫粉渐变背景 + 白色双音符 ♫（按字形精确居中、左右对称）"""
-from PIL import Image, ImageDraw, ImageFont
+"""生成 PWA/APP 图标：紫粉渐变背景 + 手绘对称双音符 ♫
+设计要点：两根符干（竖线）严格对称于图标垂直中心线，音符头挂在符干正下方，
+整体 ink 范围也严格居中，左右留白均衡。"""
+from PIL import Image, ImageDraw
 import os
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-FONT_PATH = '/System/Library/Fonts/STHeiti Medium.ttc'
-NOTE = '\u266B'  # ♫ 双八分音符
 
 def gradient_bg(size):
     """对角渐变背景（紫 -> 粉），逐行插值"""
@@ -25,35 +25,46 @@ def gradient_bg(size):
                     px[x + dx, y] = (r, g, b)
     return img
 
-def render_note(font_size):
-    """高分辨率渲染音符，裁剪出实际字形（ink bbox）"""
-    font = ImageFont.truetype(FONT_PATH, font_size)
-    tmp = Image.new('RGBA', (font_size * 2, font_size * 2), (0, 0, 0, 0))
-    d = ImageDraw.Draw(tmp)
-    d.text((font_size, font_size), NOTE, font=font, fill=(255, 255, 255, 255), anchor='mm')
-    bbox = tmp.getbbox()
-    if not bbox:
-        raise RuntimeError('音符字形渲染失败')
-    return tmp.crop(bbox)
+def draw_symmetric_note(img, size, note_h_ratio=0.56):
+    """手绘对称双音符（基准 512 设计，按尺寸等比缩放）
 
-def paste_note_centered(img, size, note_h_ratio):
-    """音符按目标高度等比缩放后，以字形中心精确对齐图标中心（左右对称）"""
-    # 用 4x 目标高度渲染，缩小后边缘更平滑
-    render_h = int(size * note_h_ratio) * 4
-    note = render_note(max(render_h, 200))
-    target_h = int(size * note_h_ratio)
-    target_w = max(1, int(note.width * target_h / note.height))
-    note = note.resize((target_w, target_h), Image.LANCZOS)
-    # 字形中心 = 图标中心
-    x = (size - target_w) // 2
-    y = (size - target_h) // 2
-    img.alpha_composite(note, (x, y))
+    结构（以中心 c 对称）：
+    - 两根符干：中心分别在 c-d 与 c+d（严格对称），从顶部贯穿到头部
+    - 两个音符头：椭圆挂在符干正下方（头中心 = 干中心，对称）
+    - 横梁：水平连接两干顶部
+    整体 ink bbox 关于 c 中心完全对称。
+    """
+    k = size / 512.0
+    c = size / 2
+    white = (255, 255, 255, 255)
+    d = 100 * k          # 符干距中心线半距（两干中心距 200*k）
+    stem_w = 24 * k      # 符干宽
+    head_w = 116 * k     # 音符头宽
+    head_h = 78 * k      # 音符头高
+    y_top = 130 * k      # 梁/干顶部
+    head_cy = 377 * k    # 音符头中心 y
+    beam_h = 54 * k      # 横梁高
+    stem_bottom = 392 * k  # 符干底部（插入头内）
+
+    draw = ImageDraw.Draw(img)
+    for side in (-1, 1):
+        x_center = c + side * d
+        # 音符头（椭圆，中心 = 干中心）
+        draw.ellipse([x_center - head_w/2, head_cy - head_h/2,
+                      x_center + head_w/2, head_cy + head_h/2], fill=white)
+        # 符干（矩形，中心对称于 x_center）
+        draw.rectangle([x_center - stem_w/2, y_top,
+                        x_center + stem_w/2, stem_bottom], fill=white)
+    # 横梁：连接两干顶部（水平，覆盖两干并外延到干外缘）
+    beam_left = c - d - stem_w/2 - 6 * k
+    beam_right = c + d + stem_w/2 + 6 * k
+    draw.rectangle([beam_left, y_top, beam_right, y_top + beam_h], fill=white)
     return img
 
-def make_icon(size, note_h_ratio=0.52):
-    """渐变背景 + 居中白色音符（高度占 52%，留呼吸空间）+ 圆角"""
+def make_icon(size, note_h_ratio=0.56):
+    """渐变背景 + 对称双音符 + 圆角"""
     img = gradient_bg(size).convert('RGBA')
-    paste_note_centered(img, size, note_h_ratio)
+    draw_symmetric_note(img, size, note_h_ratio)
     # 圆角蒙版
     mask = Image.new('L', (size, size), 0)
     mdraw = ImageDraw.Draw(mask)
@@ -63,10 +74,18 @@ def make_icon(size, note_h_ratio=0.52):
     final.paste(img, (0, 0), mask)
     return final
 
-def make_maskable(size, note_h_ratio=0.38):
-    """maskable 图标：全幅渐变背景 + 音符高 38%（留足 safe area）"""
+def make_maskable(size):
+    """maskable 图标：全幅渐变背景 + 音符缩到 40% 居中（留足 safe area）"""
     bg = gradient_bg(size).convert('RGBA')
-    paste_note_centered(bg, size, note_h_ratio)
+    # 先在大画布绘制再等比缩小贴回，保证小尺寸下比例一致
+    big = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw_symmetric_note(big, size, 0.56)
+    # 缩放到 40% 高度（0.40/0.56 ≈ 0.714 倍）
+    factor = 0.40 / 0.56
+    new_w = int(size * factor)
+    small = big.resize((new_w, new_w), Image.LANCZOS)
+    # 只贴音符区域（big 大部分透明，resize 后整体贴上即可）
+    bg.alpha_composite(small, ((size - new_w)//2, (size - new_w)//2))
     return bg
 
 sizes = {

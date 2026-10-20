@@ -468,29 +468,7 @@ html, body {
   padding: 0 28px 24px;
 }
 
-.pf-art-wrap {
-  width: min(78vw, 320px);
-  aspect-ratio: 1;
-  margin: 12px auto 20px;
-  border-radius: 24px;
-  background: var(--bg-card);
-  box-shadow: 0 24px 60px rgba(0,0,0,.55);
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-.pf-art { width: 100%; height: 100%; object-fit: cover; display: block; }
-.pf-art-fallback {
-  font-size: 72px;
-  color: var(--text-faint);
-  background: var(--grad-soft);
-  width: 100%; height: 100%;
-  display: flex; align-items: center; justify-content: center;
-}
-
-.pf-meta { text-align: center; margin-bottom: 14px; }
+.pf-meta { text-align: center; margin: 10px 0 6px; }
 .pf-title {
   font-size: 20px;
   font-weight: 700;
@@ -587,16 +565,16 @@ input[type="range"]:active::-webkit-slider-thumb {
 .pf-volume-wrap.expanded { width: 150px; }
 .pf-vol-icon { font-size: 18px; color: var(--text-dim); flex-shrink: 0; }
 
-/* 歌词 */
+/* 歌词（播放页主体区域） */
 .pf-lyrics {
   flex: 1;
-  min-height: 180px;
-  max-height: 40dvh;
+  min-height: 200px;
+  max-height: 56dvh;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 10px 0;
-  mask-image: linear-gradient(transparent, #000 12%, #000 82%, transparent);
-  -webkit-mask-image: linear-gradient(transparent, #000 12%, #000 82%, transparent);
+  padding: 12px 0;
+  mask-image: linear-gradient(transparent, #000 10%, #000 84%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, #000 10%, #000 84%, transparent);
 }
 .lyrics-placeholder {
   text-align: center;
@@ -606,8 +584,8 @@ input[type="range"]:active::-webkit-slider-thumb {
 }
 .lyric-line {
   text-align: center;
-  font-size: 15px;
-  line-height: 2.1;
+  font-size: 16.5px;
+  line-height: 2.15;
   color: var(--text-faint);
   transition: color .25s, transform .25s;
 }

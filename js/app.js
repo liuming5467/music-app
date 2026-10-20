@@ -104,7 +104,7 @@ const dom = {
   miniArtist: $('miniArtist'), miniProgressBar: $('miniProgressBar'),
   miniPrev: $('miniPrev'), miniPlay: $('miniPlay'), miniNext: $('miniNext'), miniPlayIcon: $('miniPlayIcon'),
   pf: $('playerFullscreen'), pfBg: $('pfBg'), pfClose: $('pfClose'), pfFav: $('pfFav'),
-  pfListName: $('pfListName'), pfArt: $('pfArt'), pfArtFallback: $('pfArtFallback'),
+  pfListName: $('pfListName'),
   pfTitle: $('pfTitle'), pfArtist: $('pfArtist'), pfSource: $('pfSource'), pfQuality: $('pfQuality'),
   pfTimeCur: $('pfTimeCur'), pfTimeDur: $('pfTimeDur'), pfSeek: $('pfSeek'),
   pfMode: $('pfMode'), pfPrev: $('pfPrev'), pfPlay: $('pfPlay'), pfNext: $('pfNext'), pfPlayIcon: $('pfPlayIcon'),
@@ -811,7 +811,6 @@ function updatePlayerUI() {
   dom.pfListName.textContent = queueName();
   dom.pfFav.textContent = isFaved(t) ? '❤' : '♡';
   dom.pfFav.classList.toggle('faved', isFaved(t));
-  setArtImg(dom.pfArt, dom.pfArtFallback, t.cover);
   dom.pfMode.textContent = MODE_ICON[state.playMode];
   document.title = `${t.title} - ${t.artist} | 我的音乐站`;
 }

@@ -1321,10 +1321,22 @@ dom.pfSeek.addEventListener('change', () => {
   dom.pfSeek.dragging = false;
 });
 
-/* 音量：iOS 由硬件音量控制，此处对安卓/桌面生效 */
+/* 音量控制 */
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);  // iPadOS 伪装 Mac
 let savedVol = parseInt(dom.pfVolume.value, 10) / 100;
 dom.audio.volume = savedVol;
+
+// 拖动音量滑块实时生效（安卓/桌面；iOS 由硬件音量控制，属性被 Apple 屏蔽）
+dom.pfVolume.addEventListener('input', () => {
+  const v = parseInt(dom.pfVolume.value, 10) / 100;
+  dom.audio.volume = v;
+  if (v === 0) dom.volWrap.querySelector('.pf-vol-icon').textContent = '🔇';
+  else dom.volWrap.querySelector('.pf-vol-icon').textContent = v < 0.5 ? '🔉' : '🔊';
+});
+
 dom.volWrap.querySelector('.pf-vol-icon').addEventListener('click', () => {
+  if (IS_IOS) { toast('iPhone 音量请用手机侧边按键调节'); return; }
   dom.volWrap.classList.toggle('expanded');
 });
 

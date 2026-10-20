@@ -56,16 +56,20 @@
     <!-- ======== 主内容区 ======== -->
     <main class="app-main">
 
-      <!-- Tab: 搜索结果 -->
+      <!-- Tab: 搜索/推荐 -->
       <section class="tab-panel" id="panelResults">
         <div class="panel-head">
-          <h2>搜索结果</h2>
-          <span class="result-count" id="resultCount"></span>
+          <h2 id="listTitle">猜你喜欢</h2>
+          <div class="pl-actions">
+            <span class="result-count" id="resultCount"></span>
+            <button id="btnBackReco" class="text-btn hidden" aria-label="返回推荐">← 推荐</button>
+            <button id="btnRefreshReco" class="text-btn" aria-label="换一批推荐">🔄 换一批</button>
+          </div>
         </div>
         <ul class="track-list" id="resultList">
           <li class="empty-hint">
-            <div class="empty-art">🎧</div>
-            <p>搜索并播放一首歌吧！</p>
+            <div class="empty-art">🎵</div>
+            <p>正在为你准备今日推荐…</p>
           </li>
         </ul>
       </section>

@@ -20,6 +20,12 @@ const SOURCE_NAME = { netease: '网易云', qq: 'QQ', kuwo: '酷我', joox: 'JOO
 const MODE_ICON = { loop: '🔁', one: '🔂', random: '🔀' };
 const MODE_NAME = { loop: '列表循环', one: '单曲循环', random: '随机播放' };
 const LS_KEY = 'mystation.v1';
+// 猜你喜欢：热门关键词池（与用户听过的歌手混合推荐）
+const RECOMMEND_POOL = [
+  '周杰伦', '林俊杰', '陈奕迅', '邓紫棋', '五月天', '薛之谦', '毛不易', '赵雷',
+  '李荣浩', '周深', '王菲', '孙燕姿', '陶喆', '方大同', '田馥甄', '蔡健雅',
+  'Taylor Swift', 'Adele', 'Ed Sheeran', 'Coldplay', 'Bruno Mars', 'Billie Eilish',
+];
 
 /* ---------------- 状态 ---------------- */
 const state = {
@@ -32,6 +38,11 @@ const state = {
 
   favorites: [],              // 收藏 track 数组
   playlists: [],              // [{id, name, tracks:[track]}]
+
+  listView: 'recommend',      // 列表视图：recommend(猜你喜欢) | search(搜索结果)
+  recommendTracks: [],        // 猜你喜欢列表
+  recoKeywords: [],           // 本次推荐依据的关键词
+  recoLoading: false,
 
   queue: { type: 'results', plId: null },   // 当前播放队列
   currentTrack: null,
@@ -47,6 +58,7 @@ const dom = {
   searchInput: $('searchInput'), searchBtn: $('searchBtn'), searchStatus: $('searchStatus'),
   sourceChips: $('sourceChips'), limitSelect: $('limitSelect'),
   resultList: $('resultList'), resultCount: $('resultCount'),
+  listTitle: $('listTitle'), btnRefreshReco: $('btnRefreshReco'), btnBackReco: $('btnBackReco'),
   favList: $('favList'), favCount: $('favCount'), userPlaylists: $('userPlaylists'),
   miniPlayer: $('miniPlayer'), miniArt: $('miniArt'), miniTitle: $('miniTitle'),
   miniArtist: $('miniArtist'), miniProgressBar: $('miniProgressBar'),
@@ -219,10 +231,85 @@ async function doSearch(reset = true) {
 
   state.searching = false;
   dom.searchBtn.disabled = false;
+  state.listView = 'search';
   dom.searchStatus.textContent = results.length ? `搜索完成 · ${results.length} 首` : '没有找到结果，换个关键词试试';
   renderResults();
   if (!state.currentTrack && state.searchResults.length) {
     playFromQueue(0);
+  }
+}
+
+/* ================================================================
+ * 猜你喜欢（进入 APP 的推荐列表，可直接整列播放）
+ * ================================================================ */
+function collectListenedArtists() {
+  // 从收藏 + 自建歌单提取听过的歌手（个性化依据）
+  const artists = new Set();
+  const collect = t => String(t.artist || '').split(/[\/,，、&]/).forEach(a => {
+    const s = a.trim();
+    if (s && s.length >= 2 && s.length <= 12 && !/live/i.test(s)) artists.add(s);
+  });
+  state.favorites.forEach(collect);
+  state.playlists.forEach(p => p.tracks.forEach(collect));
+  return [...artists];
+}
+
+function pickRecoKeywords() {
+  // 1 个听过的歌手（如有）+ 1 个热门池关键词，保证新鲜感与个性化兼顾
+  const kws = [];
+  const mine = collectListenedArtists().filter(a => !RECOMMEND_POOL.includes(a));
+  if (mine.length) kws.push(mine[Math.floor(Math.random() * mine.length)]);
+  kws.push(RECOMMEND_POOL[Math.floor(Math.random() * RECOMMEND_POOL.length)]);
+  return [...new Set(kws)].slice(0, 2);
+}
+
+async function loadRecommendations() {
+  if (state.recoLoading) return;
+  state.recoLoading = true;
+
+  const kws = pickRecoKeywords();
+  state.recoKeywords = kws;
+  state.listView = 'recommend';
+  dom.searchStatus.textContent = '正在为你挑选歌曲…';
+  dom.listTitle.textContent = '猜你喜欢';
+  renderResults(); // 先显示空态占位
+
+  const enabled = Object.keys(state.enabledSources).filter(k => state.enabledSources[k]);
+  const PER_KW = 8;  // 每个关键词每源取 8 首
+  const tasks = [];
+  kws.forEach(kw => enabled.forEach(s => {
+    const fn = {
+      netease: () => searchNetease(kw),
+      qq: () => searchQQ(kw),
+      kuwo: () => searchKuwo(kw, PER_KW),
+      joox: () => searchJoox(kw),
+    }[s];
+    tasks.push(fn().catch(e => { console.warn('reco source fail', s, e); return []; }));
+  }));
+
+  let tracks = [];
+  try {
+    const groups = await Promise.all(tasks);
+    tracks = interleave(groups.map(g => (g || []).slice(0, PER_KW)));
+  } catch (e) { console.error(e); }
+
+  // 去重 & 入 map
+  const seen = new Set();
+  tracks = tracks.filter(t => { if (seen.has(t.uid)) return false; seen.add(t.uid); return true; });
+  tracks.forEach(t => state.trackMap.set(t.uid, t));
+  // 洗牌让每次进入都有新鲜感
+  for (let i = tracks.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+  }
+  state.recommendTracks = tracks.slice(0, 24);
+  state.recoLoading = false;
+
+  if (state.listView === 'recommend') {
+    dom.searchStatus.textContent = state.recommendTracks.length
+      ? `根据「${kws.join('、')}」为你推荐，点一首开始听`
+      : '推荐加载失败，手动搜索试试';
+    renderResults();
   }
 }
 
@@ -298,6 +385,7 @@ async function ensurePlayable(track) {
 /* -------- 播放队列 -------- */
 function getQueueList() {
   const q = state.queue;
+  if (q.type === 'recommend') return state.recommendTracks;
   if (q.type === 'results') return state.searchResults;
   if (q.type === 'favorites') return state.favorites;
   if (q.type === 'playlist') {
@@ -308,6 +396,7 @@ function getQueueList() {
 }
 function queueName() {
   const q = state.queue;
+  if (q.type === 'recommend') return '猜你喜欢';
   if (q.type === 'results') return '搜索结果';
   if (q.type === 'favorites') return '我的收藏';
   const pl = state.playlists.find(p => p.id === q.plId);
@@ -547,10 +636,22 @@ function renderTrackList(listEl, tracks, listType, emptyHtml) {
 
 const EMPTY_SEARCH = `<li class="empty-hint"><div class="empty-art">🎧</div><p>搜索并播放一首歌吧！</p></li>`;
 const EMPTY_FAV = `<li class="empty-hint"><div class="empty-art">♡</div><p>还没有收藏，点击歌曲右侧 ♡ 收藏</p></li>`;
+const EMPTY_RECO = `<li class="empty-hint"><div class="empty-art">🎵</div><p>正在为你准备推荐…<br>也可以直接搜索想听的歌</p></li>`;
 
 function renderResults() {
-  renderTrackList(dom.resultList, state.searchResults, 'results', EMPTY_SEARCH);
-  dom.resultCount.textContent = state.searchResults.length ? `${state.searchResults.length} 首` : '';
+  if (state.listView === 'recommend') {
+    dom.listTitle.textContent = '猜你喜欢';
+    renderTrackList(dom.resultList, state.recommendTracks, 'recommend', EMPTY_RECO);
+    dom.resultCount.textContent = state.recommendTracks.length ? `${state.recommendTracks.length} 首` : '';
+    dom.btnRefreshReco.classList.remove('hidden');
+    dom.btnBackReco.classList.add('hidden');
+  } else {
+    dom.listTitle.textContent = `搜索「${state.searchKeyword}」`;
+    renderTrackList(dom.resultList, state.searchResults, 'results', EMPTY_SEARCH);
+    dom.resultCount.textContent = state.searchResults.length ? `${state.searchResults.length} 首` : '';
+    dom.btnRefreshReco.classList.add('hidden');
+    dom.btnBackReco.classList.remove('hidden');
+  }
 }
 function renderFavorites() {
   renderTrackList(dom.favList, state.favorites, 'favorites', EMPTY_FAV);
@@ -793,6 +894,17 @@ dom.searchInput.addEventListener('keydown', e => {
 });
 dom.limitSelect.addEventListener('change', () => { state.perSourceLimit = parseInt(dom.limitSelect.value, 10); });
 
+/* 猜你喜欢：换一批 / 返回推荐 */
+dom.btnRefreshReco.addEventListener('click', () => loadRecommendations());
+dom.btnBackReco.addEventListener('click', () => {
+  if (!state.recommendTracks.length) { loadRecommendations(); return; }
+  state.listView = 'recommend';
+  renderResults();
+  dom.searchStatus.textContent = state.recoKeywords.length
+    ? `根据「${state.recoKeywords.join('、')}」为你推荐，点一首开始听`
+    : '点一首开始听';
+});
+
 /* 音源 chips */
 dom.sourceChips.querySelectorAll('.chip').forEach(chip => {
   const input = chip.querySelector('input');
@@ -819,7 +931,10 @@ function bindListClick(listEl, listType, plId) {
     if (!li) return;
     const idx = parseInt(li.dataset.index, 10);
     let list;
-    if (listType === 'results') list = state.searchResults;
+    if (listType === 'current') {
+      // 搜索/推荐共用一个列表容器，按当前视图取列表
+      list = state.listView === 'recommend' ? state.recommendTracks : state.searchResults;
+    } else if (listType === 'results') list = state.searchResults;
     else if (listType === 'favorites') list = state.favorites;
     else { const pl = state.playlists.find(p => p.id === plId); list = pl ? pl.tracks : []; }
     const track = list && list[idx];
@@ -833,11 +948,13 @@ function bindListClick(listEl, listType, plId) {
       return;
     }
     // 设置播放队列
-    state.queue = listType === 'playlist' ? { type: 'playlist', plId } : { type: listType, plId: null };
+    let qType = listType;
+    if (listType === 'current') qType = state.listView === 'recommend' ? 'recommend' : 'results';
+    state.queue = listType === 'playlist' ? { type: 'playlist', plId } : { type: qType, plId: null };
     playFromQueue(idx);
   });
 }
-bindListClick(dom.resultList, 'results');
+bindListClick(dom.resultList, 'current');
 bindListClick(dom.favList, 'favorites');
 
 /* 用户歌单区域（删除歌单 + 列表播放，动态渲染所以委托在容器上） */
@@ -935,5 +1052,8 @@ function init() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(e => console.warn('sw fail', e));
   }
+
+  // 进入 APP 自动加载"猜你喜欢"推荐（异步，不阻塞首屏）
+  loadRecommendations();
 }
 init();

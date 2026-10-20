@@ -426,25 +426,17 @@ html, body {
 
 .pf-bg {
   position: absolute;
-  inset: -8%;                 /* 超出边界，避免模糊露边 */
+  inset: -6%;                 /* 超出边界，缩放动画不露边 */
   background: var(--grad-soft);
   background-size: cover;
   background-position: center;
-  filter: blur(46px) brightness(.5) saturate(1.5);
-  opacity: .85;
+  filter: brightness(.58) saturate(1.15);   /* 轻度暗化保前景可读，不模糊 */
   z-index: 0;
   animation: bgDrift 26s ease-in-out infinite alternate;   /* 背景缓慢流动 */
 }
 @keyframes bgDrift {
-  from { transform: scale(1.06); background-position: 42% 46%; }
-  to   { transform: scale(1.16); background-position: 58% 54%; }
-}
-/* 前景可读性暗化叠加 */
-.pf-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(12,10,24,.28), rgba(12,10,24,.55));
+  from { transform: scale(1.04); background-position: 44% 48%; }
+  to   { transform: scale(1.12); background-position: 56% 52%; }
 }
 
 .pf-header {
@@ -599,11 +591,24 @@ input[type="range"]:active::-webkit-slider-thumb {
   mask-image: linear-gradient(transparent, #000 10%, #000 84%, transparent);
   -webkit-mask-image: linear-gradient(transparent, #000 10%, #000 84%, transparent);
 }
+/* 无歌词时：跳动音符动画 */
 .lyrics-placeholder {
-  text-align: center;
-  color: var(--text-faint);
-  font-size: 13px;
-  padding: 40px 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 70px 0;
+}
+.lyrics-placeholder span {
+  font-size: 30px;
+  animation: noteBounce 1.5s ease-in-out infinite;
+  filter: drop-shadow(0 4px 10px rgba(0,0,0,.4));
+}
+.lyrics-placeholder span:nth-child(2) { animation-delay: .2s; font-size: 36px; }
+.lyrics-placeholder span:nth-child(3) { animation-delay: .4s; }
+@keyframes noteBounce {
+  0%, 100% { transform: translateY(0) rotate(-4deg); opacity: .35; }
+  50% { transform: translateY(-16px) rotate(6deg); opacity: 1; }
 }
 .lyric-line {
   text-align: center;

@@ -658,7 +658,7 @@ function renderLyrics() {
   const box = dom.pfLyrics;
   box.innerHTML = '';
   if (!state.lyrics.length) {
-    box.innerHTML = '<div class="lyrics-placeholder">暂无歌词</div>';
+    box.innerHTML = '<div class="lyrics-placeholder"><span>🎵</span><span>🎶</span><span>♪</span></div>';
     state.lyricLines = [];
     return;
   }

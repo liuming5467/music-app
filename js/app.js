@@ -787,6 +787,66 @@ function setArtImg(imgEl, fallbackEl, cover) {
   }
 }
 
+/* -------- 播放页沉浸式主题：封面背景 + 主色动效 -------- */
+function extractCoverColor(coverUrl) {
+  // canvas 采样封面主色；跨域图无 CORS 头时 canvas 被污染抛异常，回退 null
+  return new Promise(resolve => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    let done = false;
+    const finish = v => { if (!done) { done = true; resolve(v); } };
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = 24; cv.height = 24;
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(img, 0, 0, 24, 24);
+        const data = ctx.getImageData(0, 0, 24, 24).data;
+        let r = 0, g = 0, b = 0, n = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          const pr = data[i], pg = data[i + 1], pb = data[i + 2];
+          const lum = 0.299 * pr + 0.587 * pg + 0.114 * pb;
+          if (lum > 40 && lum < 215) { r += pr; g += pg; b += pb; n++; }
+        }
+        if (!n) { finish(null); return; }
+        finish([r / n, g / n, b / n]);
+      } catch (e) { finish(null); }
+    };
+    img.onerror = () => finish(null);
+    img.src = coverUrl;
+    setTimeout(() => finish(null), 6000);   // 网络兜底超时
+  });
+}
+
+function applyThemeColor(rgb) {
+  if (!rgb) { dom.pf.style.removeProperty('--pf-accent'); return; }
+  let [r, g, b] = rgb;
+  // 太暗则向白色提亮，保证前景元素可读
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  if (lum < 0.45) {
+    const t = Math.min(0.75, (0.45 - lum) * 1.5);
+    r += (255 - r) * t; g += (255 - g) * t; b += (255 - b) * t;
+  }
+  dom.pf.style.setProperty('--pf-accent', `rgb(${r | 0}, ${g | 0}, ${b | 0})`);
+}
+
+function applyPlayerTheme(t) {
+  // 背景封面（无封面时回落到渐变底）
+  dom.pfBg.style.backgroundImage = (t && t.cover) ? `url("${t.cover}")` : '';
+  // 主色动效：换歌时提取一次封面主色
+  const cover = (t && t.cover) || null;
+  if (applyPlayerTheme._cover !== cover) {
+    applyPlayerTheme._cover = cover;
+    applyThemeColor(null);   // 先回落默认色
+    if (cover) {
+      extractCoverColor(cover).then(rgb => {
+        // 异步回来时若已切歌则丢弃
+        if (applyPlayerTheme._cover === cover) applyThemeColor(rgb);
+      });
+    }
+  }
+}
+
 function updatePlayerUI() {
   const t = state.currentTrack;
   const paused = dom.audio.paused;
@@ -811,6 +871,8 @@ function updatePlayerUI() {
   dom.pfListName.textContent = queueName();
   dom.pfFav.textContent = isFaved(t) ? '❤' : '♡';
   dom.pfFav.classList.toggle('faved', isFaved(t));
+  // 播放页沉浸式主题：封面背景 + 主色动效
+  applyPlayerTheme(t);
   dom.pfMode.textContent = MODE_ICON[state.playMode];
   document.title = `${t.title} - ${t.artist} | 我的音乐站`;
 }

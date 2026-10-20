@@ -420,13 +420,31 @@ html, body {
   overflow: hidden;
 }
 .player-fullscreen.open { transform: translateY(0); }
+
+/* 播放页主体动态色（JS 根据封面主色实时更新，作用于按钮/进度/歌词高亮） */
+.player-fullscreen { --pf-accent: #fc466b; }
+
 .pf-bg {
   position: absolute;
-  inset: 0;
+  inset: -8%;                 /* 超出边界，避免模糊露边 */
   background: var(--grad-soft);
-  filter: blur(60px) saturate(1.4);
-  opacity: .5;
+  background-size: cover;
+  background-position: center;
+  filter: blur(46px) brightness(.5) saturate(1.5);
+  opacity: .85;
   z-index: 0;
+  animation: bgDrift 26s ease-in-out infinite alternate;   /* 背景缓慢流动 */
+}
+@keyframes bgDrift {
+  from { transform: scale(1.06); background-position: 42% 46%; }
+  to   { transform: scale(1.16); background-position: 58% 54%; }
+}
+/* 前景可读性暗化叠加 */
+.pf-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(12,10,24,.28), rgba(12,10,24,.55));
 }
 
 .pf-header {
@@ -447,7 +465,7 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.pf-fav.faved { color: var(--accent2); background: rgba(252,70,107,.15); }
+.pf-fav.faved { color: var(--pf-accent, var(--accent2)); background: rgba(255,255,255,.14); }
 .pf-head-title { flex: 1; text-align: center; min-width: 0; }
 .pf-now { font-size: 11px; color: var(--text-dim); letter-spacing: 2px; }
 .pf-list-name {
@@ -519,6 +537,9 @@ input[type="range"]::-webkit-slider-thumb {
   margin-top: -6px;
   box-shadow: 0 2px 8px rgba(0,0,0,.4);
 }
+/* 播放页进度条圆点用动态主色 */
+#pfSeek::-webkit-slider-thumb { background: var(--pf-accent, #fff); transition: background .8s; }
+#pfSeek:active::-webkit-slider-thumb { background: var(--pf-accent, var(--accent2)); }
 input[type="range"]:active::-webkit-slider-thumb {
   background: var(--accent2);
   transform: scale(1.15);
@@ -549,11 +570,13 @@ input[type="range"]:active::-webkit-slider-thumb {
 .pf-ctl:active { opacity: .6; }
 .pf-play {
   width: 68px; height: 68px;
-  background: var(--grad);
+  background: var(--pf-accent, var(--grad));
   border-radius: 50%;
   color: #fff;
-  box-shadow: 0 10px 28px rgba(252,70,107,.4);
+  box-shadow: 0 10px 28px rgba(0,0,0,.45);
+  transition: background .8s ease, transform .15s ease;
 }
+.pf-play:active { transform: scale(.94); }
 .pf-volume-wrap {
   display: flex;
   align-items: center;
@@ -590,9 +613,10 @@ input[type="range"]:active::-webkit-slider-thumb {
   transition: color .25s, transform .25s;
 }
 .lyric-line.active {
-  color: var(--text);
+  color: var(--pf-accent, var(--text));
   font-weight: 700;
   transform: scale(1.06);
+  text-shadow: 0 2px 14px rgba(0,0,0,.4);
 }
 
 /* ============ 弹窗 ============ */

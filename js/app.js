@@ -979,6 +979,201 @@ function importData() {
 }
 
 /* ================================================================
+ * 云端同步（GitHub 私有仓库文件）
+ * 电脑/手机各粘贴一次 Token（repo 权限），之后可互相同步：
+ * 上传=本地覆盖云端，下载=云端合并到本地
+ * ================================================================ */
+const SYNC_LS_KEY = 'mystation.sync';
+const SYNC_REPO = 'mystation-sync';
+const SYNC_FILE = 'mystation.json';
+
+function loadSyncCfg() {
+  try { return JSON.parse(localStorage.getItem(SYNC_LS_KEY)) || {}; } catch (e) { return {}; }
+}
+function saveSyncCfg(cfg) {
+  try { localStorage.setItem(SYNC_LS_KEY, JSON.stringify(cfg)); } catch (e) {}
+}
+
+async function ghApi(path, method = 'GET', body) {
+  const cfg = loadSyncCfg();
+  if (!cfg.token) throw new Error('no-token');
+  const res = await fetch('https://api.github.com' + path, {
+    method,
+    headers: {
+      'Authorization': 'token ' + cfg.token,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 401) throw new Error('token-invalid');
+  if (!res.ok && res.status !== 404) throw new Error('HTTP ' + res.status);
+  if (res.status === 404) {
+    const err = new Error('not-found');
+    err.status = 404;
+    throw err;
+  }
+  return res.json();
+}
+
+// UTF-8 安全的 base64 编解码（中文歌名）
+const b64encode = s => btoa(unescape(encodeURIComponent(s)));
+const b64decode = s => decodeURIComponent(escape(atob(s)));
+
+async function ensureSyncRepo() {
+  // 确认 token 有效并记录用户名；确认同步仓库存在（不存在则创建私有仓库）
+  const cfg = loadSyncCfg();
+  if (!cfg.username) {
+    const me = await ghApi('/user');
+    cfg.username = me.login;
+    saveSyncCfg(cfg);
+  }
+  try {
+    await ghApi(`/repos/${cfg.username}/${SYNC_REPO}`);
+  } catch (e) {
+    if (e.status !== 404) throw e;
+    await ghApi('/user/repos', 'POST', { name: SYNC_REPO, private: true, description: '我的音乐站同步数据（自动创建）' });
+  }
+}
+
+async function uploadToCloud() {
+  await ensureSyncRepo();
+  const cfg = loadSyncCfg();
+  const data = {
+    favorites: state.favorites,
+    playlists: state.playlists,
+    syncedAt: new Date().toISOString(),
+  };
+  const content = b64encode(JSON.stringify(data));
+  // 已有文件需带 sha 才能更新
+  let sha = null;
+  try {
+    const file = await ghApi(`/repos/${cfg.username}/${SYNC_REPO}/contents/${SYNC_FILE}`);
+    sha = file.sha;
+  } catch (e) { if (e.status !== 404) throw e; }
+  await ghApi(`/repos/${cfg.username}/${SYNC_REPO}/contents/${SYNC_FILE}`, 'PUT', {
+    message: `音乐站同步 ${new Date().toLocaleString()}`,
+    content,
+    sha: sha || undefined,
+  });
+  cfg.lastSyncAt = data.syncedAt; cfg.lastSyncDir = 'upload'; saveSyncCfg(cfg);
+  return { fav: state.favorites.length, pl: state.playlists.length };
+}
+
+async function downloadFromCloud() {
+  await ensureSyncRepo();
+  const cfg = loadSyncCfg();
+  let file;
+  try {
+    file = await ghApi(`/repos/${cfg.username}/${SYNC_REPO}/contents/${SYNC_FILE}`);
+  } catch (e) {
+    if (e.status === 404) throw new Error('cloud-empty');
+    throw e;
+  }
+  let data;
+  try { data = JSON.parse(b64decode(file.content)); }
+  catch (e) { throw new Error('cloud-data-broken'); }
+  let addedFav = 0, addedPl = 0;
+  (data.favorites || []).forEach(t => {
+    if (t && t.uid && !state.favorites.some(f => f.uid === t.uid)) {
+      state.favorites.push(trackFromStored(t)); addedFav++;
+    }
+  });
+  (data.playlists || []).forEach(p => {
+    if (p && p.name) {
+      const exist = state.playlists.find(x => x.name === p.name);
+      if (exist) {
+        (p.tracks || []).forEach(t => { if (t && t.uid && !exist.tracks.some(x => x.uid === t.uid)) exist.tracks.push(trackFromStored(t)); });
+      } else {
+        state.playlists.push({ id: 'pl' + Date.now() + Math.random().toString(36).slice(2, 6), name: p.name, tracks: (p.tracks || []).map(trackFromStored) });
+        addedPl++;
+      }
+    }
+  });
+  save(); renderAllLists();
+  cfg.lastSyncAt = new Date().toISOString(); cfg.lastSyncDir = 'download'; saveSyncCfg(cfg);
+  return { addedFav, addedPl };
+}
+
+function handleSyncError(e) {
+  console.warn('sync error', e);
+  const m = String(e && e.message || e);
+  if (m === 'no-token') toast('请先粘贴 GitHub Token');
+  else if (m === 'token-invalid') toast('Token 无效或已过期，请更换');
+  else if (m === 'cloud-empty') toast('云端还没有数据，先在另一台设备「上传」');
+  else if (m === 'cloud-data-broken') toast('云端数据损坏，重新上传覆盖');
+  else toast('同步失败：' + m);
+}
+
+function promptSync() {
+  const cfg = loadSyncCfg();
+  const hasToken = !!cfg.token;
+  const last = cfg.lastSyncAt
+    ? `上次同步：${cfg.lastSyncDir === 'upload' ? '上传' : '恢复'} · ${new Date(cfg.lastSyncAt).toLocaleString()}`
+    : '尚未同步过';
+  showModal('☁ 云端同步', `
+    <div class="hint">收藏和歌单保存在你的 GitHub <b>私有仓库</b> mystation-sync（仅自己可见）。<br>每台设备粘贴一次 Token，即可互相「上传 / 恢复」。</div>
+    ${hasToken
+      ? `<div class="hint">✓ Token 已设置${cfg.username ? '（' + esc(cfg.username) + '）' : ''} <button id="mResetToken" class="text-btn" style="margin-left:6px">更换</button></div>`
+      : `<input type="text" id="syncToken" placeholder="粘贴 GitHub Token（ghp_ 开头）" autocomplete="off">
+         <div class="hint">Token 需勾选 <b>repo</b> 权限（github.com/settings/tokens/new）</div>`}
+    <div class="hint">${esc(last)}</div>
+    <div class="row">
+      <button class="btn btn-ghost" id="mClose">关闭</button>
+      <button class="btn btn-ghost" id="mDownload">⬇ 从云端恢复</button>
+      <button class="btn btn-primary" id="mUpload">⬆ 上传到云端</button>
+    </div>`);
+
+  $('mClose').onclick = closeModal;
+  const resetBtn = $('mResetToken');
+  if (resetBtn) resetBtn.onclick = () => {
+    const c = loadSyncCfg();
+    delete c.token; delete c.username;
+    saveSyncCfg(c);
+    closeModal(); promptSync();
+  };
+
+  const readTokenInput = () => {
+    const input = $('syncToken');
+    if (input && input.value.trim()) {
+      const c = loadSyncCfg();
+      c.token = input.value.trim();
+      saveSyncCfg(c);
+      return true;
+    }
+    return !!loadSyncCfg().token;
+  };
+
+  $('mUpload').onclick = async () => {
+    if (!readTokenInput()) { toast('请先粘贴 Token'); return; }
+    const btn = $('mUpload');
+    btn.disabled = true; btn.textContent = '上传中…';
+    try {
+      const r = await uploadToCloud();
+      toast(`已上传：${r.fav} 首收藏、${r.pl} 个歌单`);
+      closeModal();
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '⬆ 上传到云端';
+      handleSyncError(e);
+    }
+  };
+
+  $('mDownload').onclick = async () => {
+    if (!readTokenInput()) { toast('请先粘贴 Token'); return; }
+    const btn = $('mDownload');
+    btn.disabled = true; btn.textContent = '恢复中…';
+    try {
+      const r = await downloadFromCloud();
+      toast(`已从云端恢复：收藏 +${r.addedFav}，歌单 +${r.addedPl}`);
+      closeModal();
+    } catch (e) {
+      btn.disabled = false; btn.textContent = '⬇ 从云端恢复';
+      handleSyncError(e);
+    }
+  };
+}
+
+/* ================================================================
  * 事件绑定
  * ================================================================ */
 /* 搜索 */
@@ -1087,6 +1282,7 @@ dom.userPlaylists.addEventListener('click', e => {
 $('btnNewPlaylist').addEventListener('click', promptNewPlaylist);
 $('btnImport').addEventListener('click', importData);
 $('btnExport').addEventListener('click', exportData);
+$('btnSync').addEventListener('click', promptSync);
 dom.modalClose.addEventListener('click', closeModal);
 dom.modalMask.addEventListener('click', e => { if (e.target === dom.modalMask) closeModal(); });
 

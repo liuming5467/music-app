@@ -142,7 +142,8 @@ async function searchNetease(kw) {
 async function searchQQ(kw) {
   const json = await fetchJson(API.qqSearch(kw));
   const data = Array.isArray(json) ? json : (Array.isArray(json && json.data) ? json.data : []);
-  return data.filter(it => it.song_mid).map((it, idx) => ({
+  // 过滤 VIP/付费歌曲（无法播放）
+  return data.filter(it => it.song_mid && it.pay !== '付费' && it.pay !== 'VIP').map((it, idx) => ({
     uid: `qq-${it.song_mid}`, source: 'qq', songid: it.song_mid, songMid: it.song_mid,
     title: it.song_title || '', artist: it.singer_name || '', album: '', keyword: kw,
     cover: null, audioUrl: null, lrc: null, detailsLoaded: false,

@@ -1,5 +1,5 @@
 /* Service Worker：缓存 APP 骨架，支持离线打开 */
-const CACHE_NAME = 'mystation-v1';
+const CACHE_NAME = 'mystation-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -35,23 +35,13 @@ self.addEventListener('fetch', e => {
   if (url.origin !== self.location.origin) return;
 
   e.respondWith(
-    caches.match(req).then(cached => {
-      if (cached) {
-        // 后台静默更新缓存
-        fetch(req).then(res => {
-          if (res && res.ok) {
-            caches.open(CACHE_NAME).then(cache => cache.put(req, res.clone()));
-          }
-        }).catch(() => {});
-        return cached;
+    // network-first：更新即时生效；离线/失败时回退缓存
+    fetch(req).then(res => {
+      if (res && res.ok) {
+        const clone = res.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
       }
-      return fetch(req).then(res => {
-        if (res && res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(req, clone));
-        }
-        return res;
-      }).catch(() => caches.match('./index.html'));
-    })
+      return res;
+    }).catch(() => caches.match(req).then(cached => cached || caches.match('./index.html')))
   );
 });

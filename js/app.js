@@ -26,6 +26,46 @@ const RECOMMEND_POOL = [
   '李荣浩', '周深', '王菲', '孙燕姿', '陶喆', '方大同', '田馥甄', '蔡健雅',
   'Taylor Swift', 'Adele', 'Ed Sheeran', 'Coldplay', 'Bruno Mars', 'Billie Eilish',
 ];
+// 常见繁->简字符映射（覆盖歌手姓名与歌名高频字，用于跨源归一去重）
+const T2S = {
+  // 姓氏
+  '吳': '吴', '陳': '陈', '劉': '刘', '楊': '杨', '黃': '黄', '趙': '赵', '馬': '马',
+  '蔣': '蒋', '鄭': '郑', '馮': '冯', '衛': '卫', '許': '许', '盧': '卢', '賀': '贺',
+  '譚': '谭', '羅': '罗', '龔': '龚', '龐': '庞', '顧': '顾', '萬': '万', '賴': '赖',
+  '錢': '钱', '孫': '孙', '張': '张', '溫': '温', '閆': '闫', '閻': '阎', '齊': '齐',
+  // 名字高频
+  '倫': '伦', '憲': '宪', '傑': '杰', '謙': '谦', '鄧': '邓', '鳳': '凤', '儀': '仪',
+  '賢': '贤', '詩': '诗', '語': '语', '瑤': '瑶', '瓊': '琼', '瑋': '玮', '穎': '颖',
+  '彥': '彦', '樺': '桦', '嵐': '岚', '瀟': '潇', '靈': '灵', '蓮': '莲', '薇': '薇',
+  // 歌名高频
+  '愛': '爱', '戀': '恋', '夢': '梦', '無': '无', '風': '风', '雲': '云', '龍': '龙',
+  '國': '国', '樂': '乐', '聲': '声', '歲': '岁', '時': '时', '間': '间', '為': '为',
+  '後': '后', '長': '长', '離': '离', '別': '别', '斷': '断', '點': '点', '頭': '头',
+  '髮': '发', '歸': '归', '還': '还', '來': '来', '說': '说', '誰': '谁', '們': '们',
+  '這': '这', '裡': '里', '裏': '里', '見': '见', '覺': '觉', '聽': '听', '讀': '读',
+  '寫': '写', '話': '话', '會': '会', '樣': '样', '纔': '才', '雙': '双', '單': '单',
+  '對': '对', '錯': '错', '淚': '泪', '傷': '伤', '憶': '忆', '記': '记', '戰': '战',
+  '勝': '胜', '敗': '败', '劍': '剑', '書': '书', '畫': '画', '詞': '词', '調': '调',
+  '譜': '谱', '隊': '队', '團': '团', '聯': '联', '歡': '欢', '慶': '庆', '節': '节',
+  '禮': '礼', '鳥': '鸟', '島': '岛', '橋': '桥', '門': '门', '園': '园', '場': '场',
+  '館': '馆', '車': '车', '飛': '飞', '魚': '鱼', '貓': '猫', '龜': '龟', '蟲': '虫',
+  '獨': '独', '幾': '几', '霧': '雾', '電': '电', '燈': '灯', '燭': '烛', '燦': '灿',
+  '爛': '烂', '輝': '辉', '閃': '闪', '陽': '阳', '陰': '阴', '晝': '昼', '濤': '涛',
+  '氣': '气', '煙': '烟', '冰': '冰', '凍': '冻', '魂': '魂', '虛': '虚', '實': '实',
+  '滿': '满', '絕': '绝', '恆': '恒', '暫': '暂', '紀': '纪', '載': '载', '頁': '页',
+  '陣': '阵', '勢': '势', '強': '强', '剛': '刚', '鋼': '钢', '鐵': '铁', '銅': '铜',
+  '銀': '银', '財': '财', '寶': '宝', '貝': '贝', '翠': '翠', '紅': '红', '綠': '绿',
+  '藍': '蓝', '蒼': '苍', '絹': '绢', '綾': '绫', '緞': '缎', '錦': '锦', '繡': '绣',
+  '織': '织', '縫': '缝', '線': '线', '絲': '丝', '綿': '绵', '紗': '纱', '網': '网',
+  '繩': '绳', '結': '结', '綁': '绑', '縛': '缚', '纏': '缠', '繞': '绕', '縱': '纵',
+  '橫': '横', '豎': '竖', '彎': '弯', '疊': '叠', '偉': '伟', '歡': '欢', '傳': '传',
+  '壞': '坏', '爺': '爷', '媽': '妈', '藍': '蓝', '鐘': '钟', '衛': '卫', '歌': '歌',
+};
+function artistKey(artist) {
+  // 归一：trim + 小写 + 繁->简
+  return String(artist || '').trim().toLowerCase()
+    .replace(/[\u3400-\u9fff]/g, ch => T2S[ch] || ch);
+}
 
 /* ---------------- 状态 ---------------- */
 const state = {
@@ -255,12 +295,41 @@ function collectListenedArtists() {
 }
 
 function pickRecoKeywords() {
-  // 1 个听过的歌手（如有）+ 1 个热门池关键词，保证新鲜感与个性化兼顾
+  // 1 个听过的歌手（如有）+ 3 个热门池关键词：个性化与多样性兼顾
+  // 个性化只取 1 个：深度合作的歌手组合搜索结果高度重合，取多个会被去重大量消耗
   const kws = [];
   const mine = collectListenedArtists().filter(a => !RECOMMEND_POOL.includes(a));
-  if (mine.length) kws.push(mine[Math.floor(Math.random() * mine.length)]);
-  kws.push(RECOMMEND_POOL[Math.floor(Math.random() * RECOMMEND_POOL.length)]);
-  return [...new Set(kws)].slice(0, 2);
+  if (mine.length) {
+    kws.push(mine[Math.floor(Math.random() * mine.length)]);
+  }
+  const pool = [...RECOMMEND_POOL];
+  for (let i = 0; i < 3 && pool.length; i++) {
+    kws.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+  }
+  return [...new Set(kws)].slice(0, 4);
+}
+
+function shuffleArr(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// 洗牌 + 双层去重：歌名级（繁简双版本只留一首）+ 歌手级（每位歌手全段检查只留一首）
+// seenTitle / seenArtist 由调用方持有，跨批次累积
+function dedupeReco(tracks, seenTitle, seenArtist) {
+  shuffleArr(tracks);
+  return tracks.filter(t => {
+    const tkey = artistKey(t.title).replace(/[\s\-—·、()（）\[\]【】]/g, '');
+    if (tkey && seenTitle.has(tkey)) return false;
+    const parts = String(t.artist || '').split(/[\/,，、&]/).map(artistKey).filter(Boolean);
+    if (parts.length && parts.some(p => seenArtist.has(p))) return false;
+    if (tkey) seenTitle.add(tkey);
+    parts.forEach(p => seenArtist.add(p));
+    return true;
+  });
 }
 
 async function loadRecommendations() {
@@ -275,7 +344,7 @@ async function loadRecommendations() {
   renderResults(); // 先显示空态占位
 
   const enabled = Object.keys(state.enabledSources).filter(k => state.enabledSources[k]);
-  const PER_KW = 8;  // 每个关键词每源取 8 首
+  const PER_KW = 8;  // 每个关键词每源取 8 首（去重后仍能保住列表长度）
   const tasks = [];
   kws.forEach(kw => enabled.forEach(s => {
     const fn = {
@@ -297,10 +366,35 @@ async function loadRecommendations() {
   const seen = new Set();
   tracks = tracks.filter(t => { if (seen.has(t.uid)) return false; seen.add(t.uid); return true; });
   tracks.forEach(t => state.trackMap.set(t.uid, t));
-  // 洗牌让每次进入都有新鲜感
-  for (let i = tracks.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+
+  // 洗牌 + 双层去重（歌名级：繁简双版本只留一首；歌手级：每位歌手全段检查只留一首）
+  const seenTitle = new Set();
+  const seenArtist = new Set();
+  tracks = dedupeReco(tracks, seenTitle, seenArtist);
+
+  // 候选不足（音源超时等）：自动补充 2 个热门关键词
+  if (tracks.length < 10) {
+    const extraKws = shuffleArr([...RECOMMEND_POOL].filter(k => !kws.includes(k))).slice(0, 2);
+    if (extraKws.length) {
+      const extraTasks = [];
+      extraKws.forEach(kw => enabled.forEach(s => {
+        const fn = {
+          netease: () => searchNetease(kw),
+          qq: () => searchQQ(kw),
+          kuwo: () => searchKuwo(kw, 6),
+          joox: () => searchJoox(kw),
+        }[s];
+        extraTasks.push(fn().catch(() => []));
+      }));
+      try {
+        const extraGroups = await Promise.all(extraTasks);
+        let more = interleave(extraGroups.map(g => (g || []).slice(0, 6)));
+        const seenMore = new Set();
+        more = more.filter(t => { if (seen.has(t.uid) || seenMore.has(t.uid)) return false; seenMore.add(t.uid); return true; });
+        more.forEach(t => state.trackMap.set(t.uid, t));
+        tracks = tracks.concat(dedupeReco(more, seenTitle, seenArtist));
+      } catch (e) { console.warn('reco extra fail', e); }
+    }
   }
   state.recommendTracks = tracks.slice(0, 24);
   state.recoLoading = false;

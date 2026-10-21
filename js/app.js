@@ -26,7 +26,13 @@ const RECOMMEND_POOL = [
   '李荣浩', '周深', '王菲', '孙燕姿', '陶喆', '方大同', '田馥甄', '蔡健雅',
   'Taylor Swift', 'Adele', 'Ed Sheeran', 'Coldplay', 'Bruno Mars', 'Billie Eilish',
 ];
-// 常见繁->简字符映射（覆盖歌手姓名与歌名高频字，用于跨源归一去重）
+// 音源热门榜单（网易云 playlist 直取）
+const NETEASE_CHARTS = [
+  { id: '3778678', name: '热歌榜' },
+  { id: '19723756', name: '飙升榜' },
+];
+// 抖音热门：各源搜索词（返回的大多为当下抖音热歌）
+const DOUYIN_KEYWORDS = { netease: '抖音热歌', kuwo: '抖音' };
 const T2S = {
   // 姓氏
   '吳': '吴', '陳': '陈', '劉': '刘', '楊': '杨', '黃': '黄', '趙': '赵', '馬': '马',
@@ -333,6 +339,23 @@ function dedupeReco(tracks, seenTitle, seenArtist) {
   });
 }
 
+// 网易云榜单直取（meting playlist：返回结构与搜索一致，含 url/pic/lrc）
+async function fetchChart(chartId, limit) {
+  const json = await fetchJson(`https://api.qijieya.cn/meting/?type=playlist&id=${encodeURIComponent(chartId)}`);
+  if (!Array.isArray(json)) return [];
+  return json.slice(0, limit).map((it, idx) => {
+    let songid = '';
+    try { songid = new URL(it.url).searchParams.get('id') || ''; } catch (e) {}
+    if (!songid) { const m = String(it.url || '').match(/[?&]id=(\d+)/); songid = m ? m[1] : `chart-${chartId}-${idx}`; }
+    return {
+      uid: `netease-${songid}`, source: 'netease', songid,
+      title: it.name || '', artist: it.artist || '', album: '', keyword: it.name || '',
+      cover: it.pic || null, audioUrl: it.url || null, lrcUrl: it.lrc || null, lrc: null,
+      detailsLoaded: false, displayIndex: idx + 1,
+    };
+  });
+}
+
 async function loadRecommendations() {
   if (state.recoLoading) return;
   state.recoLoading = true;
@@ -346,7 +369,9 @@ async function loadRecommendations() {
 
   const enabled = Object.keys(state.enabledSources).filter(k => state.enabledSources[k]);
   const PER_KW = 8;  // 每个关键词每源取 8 首（去重后仍能保住列表长度）
-  const tasks = [];
+
+  // 三路并行：关键词搜索 + 音源榜单直取 + 抖音热歌
+  const searchTasks = [];
   kws.forEach(kw => enabled.forEach(s => {
     const fn = {
       netease: () => searchNetease(kw),
@@ -354,13 +379,28 @@ async function loadRecommendations() {
       kuwo: () => searchKuwo(kw, PER_KW),
       joox: () => searchJoox(kw),
     }[s];
-    tasks.push(fn().catch(e => { console.warn('reco source fail', s, e); return []; }));
+    searchTasks.push(fn().catch(e => { console.warn('reco source fail', s, e); return []; }));
   }));
+
+  // 榜单：随机热歌榜/飙升榜，直取 12 首
+  const chart = NETEASE_CHARTS[Math.floor(Math.random() * NETEASE_CHARTS.length)];
+  const chartTask = fetchChart(chart.id, 12).catch(e => { console.warn('reco chart fail', e); return []; });
+
+  // 抖音热歌：网易云 + 酷我 各取 6 首
+  const dyTasks = [];
+  if (state.enabledSources.netease) dyTasks.push(searchNetease(DOUYIN_KEYWORDS.netease).catch(() => []));
+  if (state.enabledSources.kuwo) dyTasks.push(searchKuwo(DOUYIN_KEYWORDS.kuwo, 6).catch(() => []));
 
   let tracks = [];
   try {
-    const groups = await Promise.all(tasks);
-    tracks = interleave(groups.map(g => (g || []).slice(0, PER_KW)));
+    const [searchGroups, chartTracks, dyGroups] = await Promise.all([
+      Promise.all(searchTasks),
+      chartTask,
+      Promise.all(dyTasks),
+    ]);
+    tracks = interleave(searchGroups.map(g => (g || []).slice(0, PER_KW)))
+      .concat(chartTracks || [])
+      .concat(interleave(dyGroups.map(g => (g || []).slice(0, 6))));
   } catch (e) { console.error(e); }
 
   // 去重 & 入 map
@@ -402,7 +442,7 @@ async function loadRecommendations() {
 
   if (state.listView === 'recommend') {
     dom.searchStatus.textContent = state.recommendTracks.length
-      ? `根据「${kws.join('、')}」为你推荐，点一首开始听`
+      ? `${chart.name} · 抖音热门 · 「${kws.join('、')}」为你推荐`
       : '推荐加载失败，手动搜索试试';
     renderResults();
   }

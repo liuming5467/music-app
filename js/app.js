@@ -289,6 +289,65 @@ async function doSearch(reset = true) {
 /* ================================================================
  * 猜你喜欢（进入 APP 的推荐列表，可直接整列播放）
  * ================================================================ */
+
+/* -------- 推荐曝光记录（localStorage 持久化） --------
+ * 规则：同一首歌曝光 ≥2 次仍无互动（播放/收藏/加歌单），后续推荐不再出现；
+ * 有过互动的歌保留（用户感兴趣）。 */
+const EXPO_LS_KEY = 'mystation.exposure';
+const EXPO_MAX = 600;   // 记录容量上限，超出裁剪最旧
+
+function loadExposure() {
+  try { return JSON.parse(localStorage.getItem(EXPO_LS_KEY)) || {}; } catch (e) { return {}; }
+}
+function saveExposure(exp) {
+  try {
+    const keys = Object.keys(exp);
+    if (keys.length > EXPO_MAX) {
+      const trimmed = {};
+      keys.sort((a, b) => (exp[a].last || 0) - (exp[b].last || 0))
+        .slice(-EXPO_MAX)
+        .forEach(k => { trimmed[k] = exp[k]; });
+      exp = trimmed;
+    }
+    localStorage.setItem(EXPO_LS_KEY, JSON.stringify(exp));
+  } catch (e) { /* 存储满等异常忽略 */ }
+}
+// 批量标记曝光（推荐列表渲染后调用）
+function markExposedBatch(uids) {
+  if (!uids || !uids.length) return;
+  const exp = loadExposure();
+  const now = Date.now();
+  uids.forEach(uid => {
+    if (!uid) return;
+    const e = exp[uid] || { n: 0, act: false };
+    e.n += 1;
+    e.last = now;
+    exp[uid] = e;
+  });
+  saveExposure(exp);
+}
+// 标记互动（播放/收藏/加歌单）
+function markInteracted(uid) {
+  if (!uid) return;
+  const exp = loadExposure();
+  const e = exp[uid] || { n: 0, act: false };
+  e.act = true;
+  e.last = Date.now();
+  exp[uid] = e;
+  saveExposure(exp);
+}
+// 过滤推荐候选：曝光≥2次且无互动的下掉；有互动的保留
+function filterByExposure(tracks) {
+  const exp = loadExposure();
+  return tracks.filter(t => {
+    const e = exp[t.uid];
+    if (!e) return true;
+    if (e.act) return true;
+    if (e.n >= 2) return false;
+    return true;
+  });
+}
+
 function collectListenedArtists() {
   // 从收藏 + 自建歌单提取听过的歌手（个性化依据）
   const artists = new Set();
@@ -413,7 +472,10 @@ async function loadRecommendations() {
   const seenArtist = new Set();
   tracks = dedupeReco(tracks, seenTitle, seenArtist);
 
-  // 候选不足（音源超时等）：自动补充 2 个热门关键词
+  // 曝光过滤：曝光≥2次仍无互动的歌下掉（有互动的保留）
+  tracks = filterByExposure(tracks);
+
+  // 候选不足（音源超时/曝光过滤消耗等）：自动补充 2 个热门关键词
   if (tracks.length < 10) {
     const extraKws = shuffleArr([...RECOMMEND_POOL].filter(k => !kws.includes(k))).slice(0, 2);
     if (extraKws.length) {
@@ -434,10 +496,13 @@ async function loadRecommendations() {
         more = more.filter(t => { if (seen.has(t.uid) || seenMore.has(t.uid)) return false; seenMore.add(t.uid); return true; });
         more.forEach(t => state.trackMap.set(t.uid, t));
         tracks = tracks.concat(dedupeReco(more, seenTitle, seenArtist));
+        tracks = filterByExposure(tracks);
       } catch (e) { console.warn('reco extra fail', e); }
     }
   }
   state.recommendTracks = tracks.slice(0, 24);
+  // 标记本批曝光（换一批/重新进入时过滤已曝光≥2次无互动的歌）
+  markExposedBatch(state.recommendTracks.map(t => t.uid));
   state.recoLoading = false;
 
   if (state.listView === 'recommend') {
@@ -545,6 +610,7 @@ async function playFromQueue(index) {
   if (!track) return;
   state.currentTrack = track;
   state.retryCount = 0;
+  markInteracted(track.uid);   // 播放视为互动，推荐中保留
   updatePlayerUI();
   renderAllLists();
 
@@ -957,6 +1023,7 @@ function isFaved(track) {
 }
 function toggleFav(track) {
   if (!track) return;
+  markInteracted(track.uid);   // 收藏/取消收藏都视为互动
   const i = state.favorites.findIndex(f => f.uid === track.uid);
   if (i >= 0) {
     state.favorites.splice(i, 1);
@@ -1011,8 +1078,9 @@ function promptAddToPlaylist(track) {
     btn.onclick = () => {
       const pl = state.playlists.find(p => p.id === btn.dataset.plid);
       if (!pl) return;
-      if (pl.tracks.some(t => t.uid === track.uid)) { toast('这首歌已在歌单里'); closeModal(); return; }
+      if (pl.tracks.some(t => t.uid === track.uid)) { toast('这首歌已在歌单里'); markInteracted(track.uid); closeModal(); return; }
       pl.tracks.push(track);
+      markInteracted(track.uid);   // 加入歌单视为互动
       save(); renderPlaylists(); closeModal();
       toast(`已加入「${pl.name}」`);
     };

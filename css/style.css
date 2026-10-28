@@ -257,6 +257,8 @@ html, body {
 }
 .t-btn:active { color: var(--text); }
 .t-btn.faved { color: var(--accent2); }
+.t-btn.remove { font-size: 14px; }
+.t-btn.remove:active { color: var(--danger); }
 
 .empty-hint {
   text-align: center;

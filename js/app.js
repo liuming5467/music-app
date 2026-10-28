@@ -819,6 +819,7 @@ function trackItemHtml(track, listType, index) {
     <div class="t-actions">
       <button class="t-btn fav${faved ? ' faved' : ''}" data-act="fav">${faved ? '❤' : '♡'}</button>
       <button class="t-btn" data-act="add" aria-label="加入歌单">＋</button>
+      ${listType === 'playlist' ? `<button class="t-btn remove" data-act="remove" aria-label="从歌单移除">✕</button>` : ''}
     </div>
   </li>`;
 }
@@ -1442,6 +1443,12 @@ dom.userPlaylists.addEventListener('click', e => {
     e.stopPropagation();
     if (actBtn.dataset.act === 'fav') toggleFav(pl.tracks[idx]);
     else if (actBtn.dataset.act === 'add') promptAddToPlaylist(pl.tracks[idx]);
+    else if (actBtn.dataset.act === 'remove') {
+      const removed = pl.tracks.splice(idx, 1)[0];
+      save(); renderPlaylists();
+      toast(`已从歌单移除「${removed ? removed.title : ''}」`);
+      return;
+    }
     return;
   }
   state.queue = { type: 'playlist', plId };

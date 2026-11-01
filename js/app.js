@@ -636,11 +636,44 @@ async function playAudio(track) {
     await dom.audio.play();
     updatePlayerUI();
     setupMediaSession(track);
+    // 预取下一首播放链接（车机蓝牙切歌/熄屏场景秒响应，避免现场等 API）
+    setTimeout(prefetchNext, 4000);
   } catch (e) {
     // iOS 首次播放可能被拦截，等待用户手势后重试
     console.warn('play blocked', e);
     toast('请再点一次播放按钮');
     updatePlayerUI();
+  }
+}
+
+/* -------- 下一首预取 --------
+ * 当前曲开播 4 秒后，后台静默请求下一首的播放链接与歌词。
+ * 车机蓝牙「下一曲」/ 熄屏结束后恢复播放时无需现场等 API（iOS 熄屏冻结 JS，
+ * 唤醒后预取好的链接可直接开播）。失败静默，实际播放时仍会走 ensurePlayable。 */
+async function prefetchNext() {
+  try {
+    const i = nextIndex(1);
+    if (i < 0) return;
+    const list = getQueueList();
+    const next = list[i];
+    // 单曲循环无需预取；已有链接且未标记过期也无需重取
+    if (state.playMode === 'one' || !next || (next.audioUrl && !next._stale)) return;
+    // 队列已变（切歌/换列表）则放弃本次预取
+    const curUid = state.currentTrack && state.currentTrack.uid;
+    if (!curUid) return;
+    const curIdx = list.findIndex(t => t.uid === curUid);
+    if (curIdx < 0) return;
+    if (next._prefetching) return;
+    next._prefetching = true;
+    await ensurePlayable(next);
+    next._prefetching = false;
+  } catch (e) {
+    // 预取失败静默（实际播放时会再试）
+    if (state.currentTrack) {
+      const list = getQueueList();
+      const i = nextIndex(1);
+      if (list[i]) list[i]._prefetching = false;
+    }
   }
 }
 

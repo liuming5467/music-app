@@ -481,6 +481,107 @@ html, body {
   flex-shrink: 0;
 }
 .pf-fav.faved { color: var(--pf-accent, var(--accent2)); background: rgba(255,255,255,.14); }
+
+/* 播放列表按钮 & 抽屉 */
+.pf-queue-btn {
+  width: 36px; height: 36px;
+  border: none;
+  background: rgba(255,255,255,.07);
+  border-radius: 50%;
+  color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.pf-queue-btn:active { opacity: .6; }
+
+.pf-queue-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0,0,0,.45);
+  opacity: 0;
+  transition: opacity .25s;
+}
+.pf-queue-mask.open { opacity: 1; }
+.pf-queue-mask.hidden { display: none !important; }
+
+.pf-queue {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  max-height: 72%;
+  background: var(--bg-soft);
+  border-radius: 22px 22px 0 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform .28s cubic-bezier(.32,.72,.35,1);
+  padding-bottom: var(--safe-bottom);
+}
+.pf-queue-mask.open .pf-queue { transform: translateY(0); }
+
+.pf-queue-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 18px 12px;
+  flex-shrink: 0;
+}
+.pf-queue-title { font-size: 16px; font-weight: 700; }
+.pf-queue-count { font-size: 12px; color: var(--text-dim); flex: 1; }
+.pf-queue-close {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 24px;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.pf-queue-list {
+  list-style: none;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 10px calc(var(--safe-bottom) + 14px);
+  flex: 1;
+}
+.q-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+}
+.q-item:active { background: rgba(255,255,255,.06); }
+.q-item.playing { background: rgba(255,255,255,.08); }
+.q-num {
+  width: 22px;
+  font-size: 12px;
+  color: var(--text-faint);
+  text-align: center;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.q-item.playing .q-num { color: var(--pf-accent, var(--accent2)); }
+.q-info { flex: 1; min-width: 0; }
+.q-title {
+  font-size: 14.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.q-item.playing .q-title { color: var(--pf-accent, var(--accent2)); font-weight: 700; }
+.q-artist {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.q-playing-icon {
+  font-size: 13px;
+  color: var(--pf-accent, var(--accent2));
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
 .pf-head-title { flex: 1; text-align: center; min-width: 0; }
 .pf-now { font-size: 11px; color: var(--text-dim); letter-spacing: 2px; }
 .pf-list-name {

@@ -152,6 +152,9 @@
           <div class="pf-list-name" id="pfListName">搜索结果</div>
         </div>
         <div class="pf-fav" id="pfFav" role="button" aria-label="收藏">♡</div>
+        <button class="pf-queue-btn" id="pfQueueBtn" aria-label="播放列表">
+          <svg viewBox="0 0 24 24" width="22" height="22"><path fill="currentColor" d="M3 6h13v2H3V6zm0 5h13v2H3v-2zm0 5h9v2H3v-2zm15-6v8l6-4-6-4z"/></svg>
+        </button>
       </div>
 
       <div class="pf-body">
@@ -189,6 +192,18 @@
             <span class="pf-vol-icon">🔊</span>
             <input type="range" id="pfVolume" min="0" max="100" value="80" aria-label="音量">
           </div>
+        </div>
+      </div>
+
+      <!-- 播放列表抽屉（点歌单/搜索/推荐歌曲时整个列表就是播放队列） -->
+      <div class="pf-queue-mask hidden" id="pfQueueMask">
+        <div class="pf-queue" id="pfQueuePanel">
+          <div class="pf-queue-head">
+            <span class="pf-queue-title" id="pfQueueTitle">播放列表</span>
+            <span class="pf-queue-count" id="pfQueueCount">0 首</span>
+            <button class="pf-queue-close" id="pfQueueClose" aria-label="收起播放列表">×</button>
+          </div>
+          <ul class="pf-queue-list" id="pfQueueList"></ul>
         </div>
       </div>
     </div>

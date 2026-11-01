@@ -118,6 +118,8 @@ const dom = {
   pfVolume: $('pfVolume'), volWrap: document.querySelector('.pf-volume-wrap'),
   pfLyrics: $('pfLyrics'),
   modalMask: $('modalMask'), modalTitle: $('modalTitle'), modalBody: $('modalBody'), modalClose: $('modalClose'),
+  pfQueueBtn: $('pfQueueBtn'), pfQueueMask: $('pfQueueMask'), pfQueuePanel: $('pfQueuePanel'),
+  pfQueueTitle: $('pfQueueTitle'), pfQueueCount: $('pfQueueCount'), pfQueueList: $('pfQueueList'), pfQueueClose: $('pfQueueClose'),
   toast: $('toast'),
   audio: $('audio'),
 };
@@ -983,6 +985,8 @@ function updatePlayerUI() {
   applyPlayerTheme(t);
   dom.pfMode.textContent = MODE_ICON[state.playMode];
   document.title = `${t.title} - ${t.artist} | 我的音乐站`;
+  // 抽屉打开时同步刷新队列高亮（切歌/换队列后保持一致）
+  if (!dom.pfQueueMask.classList.contains('hidden')) renderQueue();
 }
 function createMiniImg() {
   const img = document.createElement('img');
@@ -995,8 +999,46 @@ function openPlayer() {
   requestAnimationFrame(() => requestAnimationFrame(() => dom.pf.classList.add('open')));
 }
 function closePlayer() {
+  closeQueue();
   dom.pf.classList.remove('open');
   setTimeout(() => dom.pf.classList.add('hidden'), 330);
+}
+
+/* -------- 播放列表抽屉（当前播放队列） -------- */
+function renderQueue() {
+  const list = getQueueList();
+  const cur = state.currentTrack;
+  dom.pfQueueTitle.textContent = queueName();
+  dom.pfQueueCount.textContent = `${list.length} 首`;
+  if (!list.length) {
+    dom.pfQueueList.innerHTML = `<li class="lyrics-placeholder"><span>🎵</span><span>🎶</span><span>♪</span></li>`;
+    return;
+  }
+  dom.pfQueueList.innerHTML = list.map((t, i) => {
+    const playing = cur && cur.uid === t.uid;
+    return `<li class="q-item${playing ? ' playing' : ''}" data-index="${i}">
+      <span class="q-num">${playing ? '▶' : i + 1}</span>
+      <div class="q-info">
+        <div class="q-title">${esc(t.title)}</div>
+        <div class="q-artist">${esc(t.artist)}</div>
+      </div>
+      ${playing ? '<span class="q-playing-icon">🔈</span>' : ''}
+    </li>`;
+  }).join('');
+  // 当前曲滚动到可视区
+  const active = dom.pfQueueList.querySelector('.q-item.playing');
+  if (active) active.scrollIntoView({ block: 'center' });
+}
+
+function openQueue() {
+  renderQueue();
+  dom.pfQueueMask.classList.remove('hidden');
+  requestAnimationFrame(() => requestAnimationFrame(() => dom.pfQueueMask.classList.add('open')));
+}
+function closeQueue() {
+  if (dom.pfQueueMask.classList.contains('hidden')) return;
+  dom.pfQueueMask.classList.remove('open');
+  setTimeout(() => dom.pfQueueMask.classList.add('hidden'), 280);
 }
 
 /* -------- Media Session（锁屏控制） -------- */
@@ -1482,6 +1524,17 @@ dom.pfMode.addEventListener('click', () => {
   save();
   dom.pfMode.textContent = MODE_ICON[next];
   toast(MODE_NAME[next]);
+});
+
+/* 播放列表抽屉：开关 + 点击切歌 */
+dom.pfQueueBtn.addEventListener('click', openQueue);
+dom.pfQueueClose.addEventListener('click', closeQueue);
+dom.pfQueueMask.addEventListener('click', e => { if (e.target === dom.pfQueueMask) closeQueue(); });
+dom.pfQueueList.addEventListener('click', e => {
+  const li = e.target.closest('.q-item');
+  if (!li) return;
+  closeQueue();
+  playFromQueue(parseInt(li.dataset.index, 10));
 });
 
 /* 进度条 seek */

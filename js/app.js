@@ -540,6 +540,40 @@ async function fetchQQDetails(track) {
 }
 
 async function fetchKuwoDetails(track) {
+  /* oiapi.net 已移除 CORS 头（浏览器跨域请求被拦，curl 正常导致此前未发现）。
+   * 策略：跨源回退——用网易云（有 CORS）搜「歌名+歌手」匹配同一首歌播放；
+   * 全部失败再尝试原 oiapi 接口（若未来恢复 CORS 头则自动生效）。 */
+  const titleKey = (track.title || '').replace(/\s*[(（].*[)）]\s*$/, '').trim();
+  const artistName = String(track.artist || '').split(/[\/,，、&]/)[0].trim();
+  const normTitle = artistKey(titleKey);
+  for (const kw of [`${titleKey} ${artistName}`, titleKey].filter(k => k.trim())) {
+    try {
+      const candidates = await searchNetease(kw);
+      const hit = candidates.find(t => {
+        const nt = artistKey((t.title || '').replace(/\s*[(（].*[)）]\s*$/, '').trim());
+        if (!nt || !normTitle) return false;
+        if (nt === normTitle || nt.includes(normTitle) || normTitle.includes(nt)) {
+          // 歌手也要对上（模糊包含），避免同名歌错配
+          return !artistName || artistKey(t.artist || '').includes(artistKey(artistName))
+            || artistKey(artistName).includes(artistKey(t.artist || '').split(/[\/,，、&]/)[0]);
+        }
+        return false;
+      });
+      if (hit) {
+        const merged = Object.assign({}, track, {
+          source: 'netease', songid: hit.songid,
+          audioUrl: hit.audioUrl, lrcUrl: hit.lrcUrl,
+          cover: track.cover || hit.cover,
+          detailsLoaded: false, _stale: false,
+        });
+        await fetchNeteaseDetails(merged);
+        Object.assign(track, merged, { source: 'netease', songid: merged.songid, audioUrl: merged.audioUrl, lrcUrl: merged.lrcUrl, lrc: merged.lrc });
+        track.qualityLabel = track.qualityLabel || '标准';
+        return;
+      }
+    } catch (e) { console.warn('kuwo cross-source fail', kw, e); }
+  }
+  // 回退：原 oiapi 逻辑（接口恢复 CORS 头后自动生效）
   const n = track.displayIndex || 1;
   const j = await fetchJson(API.kuwoDetail(track.keyword, n));
   if (!j || !j.data || Array.isArray(j.data)) throw new Error('kuwo detail invalid');

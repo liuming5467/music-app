@@ -546,32 +546,49 @@ async function fetchKuwoDetails(track) {
   const titleKey = (track.title || '').replace(/\s*[(（].*[)）]\s*$/, '').trim();
   const artistName = String(track.artist || '').split(/[\/,，、&]/)[0].trim();
   const normTitle = artistKey(titleKey);
+  const normArtist = artistKey(artistName);
+  // 收集两轮搜索的候选：歌名匹配即可（去重），排序时歌手匹配/歌名完全一致的排前面
+  let candidates = [];
   for (const kw of [`${titleKey} ${artistName}`, titleKey].filter(k => k.trim())) {
     try {
-      const candidates = await searchNetease(kw);
-      const hit = candidates.find(t => {
+      const found = await searchNetease(kw);
+      found.forEach(t => {
         const nt = artistKey((t.title || '').replace(/\s*[(（].*[)）]\s*$/, '').trim());
-        if (!nt || !normTitle) return false;
-        if (nt === normTitle || nt.includes(normTitle) || normTitle.includes(nt)) {
-          // 歌手也要对上（模糊包含），避免同名歌错配
-          return !artistName || artistKey(t.artist || '').includes(artistKey(artistName))
-            || artistKey(artistName).includes(artistKey(t.artist || '').split(/[\/,，、&]/)[0]);
-        }
-        return false;
+        if (!nt || !normTitle) return;
+        if (!(nt === normTitle || nt.includes(normTitle) || normTitle.includes(nt))) return;
+        const artistOk = !normArtist
+          || artistKey(t.artist || '').includes(normArtist)
+          || normArtist.includes(artistKey(t.artist || '').split(/[\/,，、&]/)[0]);
+        candidates.push({ t, artistOk, exact: nt === normTitle });
       });
-      if (hit) {
-        const merged = Object.assign({}, track, {
-          source: 'netease', songid: hit.songid,
-          audioUrl: hit.audioUrl, lrcUrl: hit.lrcUrl,
-          cover: track.cover || hit.cover,
-          detailsLoaded: false, _stale: false,
-        });
-        await fetchNeteaseDetails(merged);
-        Object.assign(track, merged, { source: 'netease', songid: merged.songid, audioUrl: merged.audioUrl, lrcUrl: merged.lrcUrl, lrc: merged.lrc });
-        track.qualityLabel = track.qualityLabel || '标准';
-        return;
+    } catch (e) { console.warn('kuwo cross-source search fail', kw, e); }
+  }
+  const seenCand = new Set();
+  candidates = candidates.filter(c => { if (seenCand.has(c.t.uid)) return false; seenCand.add(c.t.uid); return true; });
+  candidates.sort((a, b) => (b.artistOk - a.artistOk) || (b.exact - a.exact));
+
+  for (const c of candidates) {
+    const hit = c.t;
+    if (!hit.audioUrl) continue;
+    try {
+      // 验证播放链接真的返回音频（VIP/下架曲目 meting 会返回 JSON 错误体而非音频）
+      const check = await fetch(hit.audioUrl, { headers: { Range: 'bytes=0-1' }, signal: AbortSignal.timeout(8000) });
+      const ct = check.headers.get('content-type') || '';
+      if (!/audio|mpeg|mp4|octet-stream/i.test(ct)) {
+        console.warn('kuwo cross-source candidate unplayable', hit.title, hit.artist, ct);
+        continue;   // 不可播，试下一个候选
       }
-    } catch (e) { console.warn('kuwo cross-source fail', kw, e); }
+      const merged = Object.assign({}, track, {
+        source: 'netease', songid: hit.songid,
+        audioUrl: hit.audioUrl, lrcUrl: hit.lrcUrl,
+        cover: track.cover || hit.cover,
+        detailsLoaded: false, _stale: false,
+      });
+      await fetchNeteaseDetails(merged);
+      Object.assign(track, merged, { source: 'netease', songid: merged.songid, audioUrl: merged.audioUrl, lrcUrl: merged.lrcUrl, lrc: merged.lrc });
+      track.qualityLabel = track.qualityLabel || '标准';
+      return;
+    } catch (e) { console.warn('kuwo cross-source verify fail', hit.title, e); }
   }
   // 回退：原 oiapi 逻辑（接口恢复 CORS 头后自动生效）
   const n = track.displayIndex || 1;

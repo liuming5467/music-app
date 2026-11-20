@@ -676,8 +676,10 @@ async function playFromQueue(index) {
     autoNext();
     return;
   }
-  await loadLyrics(track);
+  // 先开播再异步加载歌词：iOS 熄屏时后台网络请求受限，
+  // 若 await 歌词请求会阻塞切歌，导致播完不自动下一首
   playAudio(track);
+  loadLyrics(track).catch(e => console.warn('lyrics lazy fail', e));
 }
 
 async function playAudio(track) {
@@ -687,8 +689,9 @@ async function playAudio(track) {
     await dom.audio.play();
     updatePlayerUI();
     setupMediaSession(track);
-    // 预取下一首播放链接（车机蓝牙切歌/熄屏场景秒响应，避免现场等 API）
-    setTimeout(prefetchNext, 4000);
+    // 预取下一首播放链接（车机蓝牙切歌/熄屏场景秒响应，避免现场等 API）。
+    // 不用 setTimeout：熄屏后定时器被冻结会导致预取永远不执行
+    prefetchNext();
   } catch (e) {
     // iOS 首次播放可能被拦截，等待用户手势后重试
     console.warn('play blocked', e);
@@ -782,6 +785,8 @@ dom.audio.addEventListener('timeupdate', () => {
     dom.pfTimeCur.textContent = fmtTime(a.currentTime);
   }
   syncLyrics(a.currentTime);
+  // 临近结束（<30s）补预取下一首：确保 ended 触发时下一首链接已就绪（幂等，重复调用无害）
+  if (a.duration - a.currentTime < 30) prefetchNext();
 });
 dom.audio.addEventListener('loadedmetadata', () => {
   dom.pfTimeDur.textContent = fmtTime(dom.audio.duration);

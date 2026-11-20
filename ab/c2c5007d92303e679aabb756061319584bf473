@@ -1,0 +1,21 @@
+js/app.js
+  s_347f699738d1a5::t_d60d9542b20184 692-694
+  s_347f699738d1a5::t_cdc37d0c5d8330 679-680,682
+  s_347f699738d1a5::t_2ce804d4729937 788-789
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "abc2c5007d92303e679aabb756061319584bf473",
+  "prompts": {},
+  "sessions": {
+    "s_347f699738d1a5": {
+      "agent_id": {
+        "tool": "codefuse",
+        "id": "1d1b7fdd-5582-45be-a4e3-f794b1b7a36c",
+        "model": "codefuse_official_channel/GLM-5.3:glink_domestic"
+      },
+      "human_author": "grady.lm <grady.lm@antgroup.com>"
+    }
+  }
+}
